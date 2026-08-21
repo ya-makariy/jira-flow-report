@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to exact releases: astral-sh/setup-uv publishes no floating
+# major tag past v7, and a mix of pinning styles is worse than one. Dependabot
+# keeps them current. If a workflow with secrets or publish rights is ever added,
+# pin that one by commit SHA instead.
+
 # A new push supersedes an in-flight run on the same ref.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,8 +29,8 @@ jobs:
     name: lint & format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
       - name: Lockfile is current
@@ -44,8 +49,8 @@ jobs:
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       # the instance-data gate reads `git ls-files`, so it needs a real checkout
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
           python-version: ${{ matrix.python }}
@@ -59,8 +64,8 @@ jobs:
     name: offline scripts on a bare interpreter
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
       - name: Build an empty venv, so the check cannot be vacuous
@@ -116,8 +121,8 @@ jobs:
     name: package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
       - run: uv build
@@ -152,7 +157,7 @@ jobs:
             uvx --from "$(ls dist/*.whl)" jira-flow-report \
               install --desktop-zip-only --desktop-zip bundle.zip
           python -m zipfile -l bundle.zip
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: dist
           path: |
