@@ -11,7 +11,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from jira_flow_report import config
+from jira_flow_report import config, ui, update
 
 RUN_CODE = """```bash
 S=~/.claude/skills/jira-flow-report/scripts
@@ -146,6 +146,8 @@ def render_skill(cfg: dict, dest: Path, target: str) -> None:
     here = Path(__file__).parent
     for name in ("aggregate.py", "render.py"):
         shutil.copy2(here / name, scripts / name)
+    # so `status` can tell whether this copy still matches the CLI and the config
+    update.write_stamp(dest, cfg)
 
 
 def run(args) -> int:
@@ -155,7 +157,7 @@ def run(args) -> int:
     if not args.desktop_zip_only:
         dest = Path(args.skills_dir).expanduser() / "jira-flow-report"
         if dest.exists() and not args.force:
-            print(f"{dest} already exists — overwriting its generated files", file=sys.stderr)
+            ui.info(f"{dest} exists — overwriting its generated files")
         render_skill(cfg, dest, target="code")
         made.append(str(dest))
 
@@ -173,7 +175,10 @@ def run(args) -> int:
         made.append(str(out))
 
     for m in made:
-        print(f"installed: {m}")
+        ui.ok(f"installed [bold]{m}[/bold]")
     if not args.desktop_zip_only:
-        print("\nRestart Claude Code (or start a new session) for /jira-flow-report to appear.")
+        ui.info(
+            "restart Claude Code (or start a new session) for "
+            "[bold]/jira-flow-report[/bold] to appear"
+        )
     return 0

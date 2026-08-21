@@ -1,6 +1,6 @@
 [project]
 name = "jira-flow-report"
-version = "0.1.0"
+version = "0.2.0"
 description = "Kanban flow reports for any Jira board, and a Claude skill that drives them"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,6 +14,8 @@ classifiers = [
 dependencies = [
   "jira>=3.8",
   "tomli-w>=1.0",
+  "rich>=13",
+  "questionary>=2",
 ]
 
 [project.scripts]
@@ -29,10 +31,14 @@ dev = ["pytest>=8", "pyyaml>=6", "ruff>=0.16"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.sdist]
 # Declared explicitly: otherwise sdist contents depend on VCS state and on
 # whatever untracked files happen to be lying in the tree.
-include = ["src", "skill", "tests", "pyproject.toml", "README.md", "LICENSE"]
+include = ["src", "skill", "tests", "pyproject.toml", "README.md", "LICENSE",
+           "hatch_build.py"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jira_flow_report"]

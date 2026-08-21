@@ -128,6 +128,23 @@ jobs:
       - run: uv build
       - name: Metadata is well formed
         run: uvx twine check dist/*
+      - name: Build info is baked into the wheel
+        # The banner and `status` read this; an empty stamp means the hook silently
+        # did not run, and every install would report an unknown build date.
+        run: |
+          set -euo pipefail
+          python -m zipfile -e "$(ls dist/*.whl)" unpacked/
+          cat unpacked/jira_flow_report/_build.py
+          python - <<'PY'
+          import re, pathlib, sys
+          text = pathlib.Path("unpacked/jira_flow_report/_build.py").read_text()
+          got = dict(re.findall(r"^(\w+) = (.+)$", text, re.M))
+          assert got.get("VERSION", "''").strip("'\"") , "VERSION not baked"
+          assert re.fullmatch(r"'\d{4}-\d{2}-\d{2}'", got.get("BUILD_DATE", "")), \
+              f"BUILD_DATE looks wrong: {got.get('BUILD_DATE')!r}"
+          assert got.get("COMMIT", "''").strip("'\"") , "COMMIT not baked"
+          print("build stamp OK:", got)
+          PY
       - name: The skill templates are inside the wheel
         # install.py reads them at runtime; a missing force-include only shows up
         # when someone installs from a wheel rather than from a checkout.

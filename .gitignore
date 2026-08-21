@@ -12,3 +12,4 @@ snapshot.json
 report.json
 *.html
 *-desktop.zip
+_build.py

@@ -6,69 +6,25 @@ from __future__ import annotations
 import collections
 import sys
 
+from jira_flow_report import prompts, ui
+
 AGILE = "{server}/rest/agile/1.0/{{path}}"
 
 
-def _tty() -> bool:
-    return sys.stdin.isatty() and sys.stdout.isatty()
-
-
 def ask(prompt: str, default: str | None = None, *, assume: bool = False) -> str:
-    if assume or not _tty():
-        if default is None:
-            sys.exit(f"Need a value for: {prompt} (no terminal to ask on; pass it as a flag)")
-        return default
-    suffix = f" [{default}]" if default else ""
-    while True:
-        got = input(f"{prompt}{suffix}: ").strip()
-        if got:
-            return got
-        if default is not None:
-            return default
+    return prompts.text(prompt, default, assume=assume)
 
 
 def pick(
     prompt: str, options: list[tuple[str, str]], default: int = 0, *, assume: bool = False
 ) -> str:
-    """options: (value, label). Returns the chosen value."""
-    if not options:
-        sys.exit(f"Nothing to choose from for: {prompt}")
-    if len(options) == 1:
-        print(f"  {prompt}: {options[0][1]}  (only candidate)")
-        return options[0][0]
-    if assume or not _tty():
-        print(f"  {prompt}: {options[default][1]}  (default)")
-        return options[default][0]
-    print(f"\n{prompt}")
-    for i, (_, label) in enumerate(options, 1):
-        print(f"  {i:2d}) {label}")
-    while True:
-        got = input(f"choose 1-{len(options)} [{default + 1}]: ").strip()
-        if not got:
-            return options[default][0]
-        if got.isdigit() and 1 <= int(got) <= len(options):
-            return options[int(got) - 1][0]
+    return prompts.select(prompt, options, default, assume=assume)
 
 
 def multipick(
     prompt: str, options: list[str], default: list[str], *, assume: bool = False
 ) -> list[str]:
-    if assume or not _tty():
-        print(f"  {prompt}: {', '.join(default)}  (default)")
-        return default
-    print(f"\n{prompt}")
-    for i, o in enumerate(options, 1):
-        mark = "*" if o in default else " "
-        print(f"  {mark}{i:2d}) {o}")
-    got = input("numbers, comma-separated, or blank to keep the starred set: ").strip()
-    if not got:
-        return default
-    out = []
-    for raw in got.split(","):
-        part = raw.strip()
-        if part.isdigit() and 1 <= int(part) <= len(options):
-            out.append(options[int(part) - 1])
-    return out or default
+    return prompts.multiselect(prompt, options, default, assume=assume)
 
 
 def _agile(client, server, path):
@@ -130,7 +86,7 @@ def discover_project(client, server, board_id: int) -> str | None:
     try:
         page = _agile(client, server, f"board/{board_id}/issue?maxResults=1&fields=key")
     except Exception as exc:  # noqa: BLE001 - optional convenience, any failure just means "ask"
-        print(f"  (could not read an issue off the board: {exc})", file=sys.stderr)
+        ui.warn(f"could not read an issue off the board: {exc}")
         return None
     issues = page.get("issues", [])
     return issues[0]["key"].rsplit("-", 1)[0] if issues else None
@@ -203,10 +159,8 @@ def discover_status_aliases(client, project: str, sample: int = 300) -> tuple[di
         if best != src:
             aliases[src] = best
     for src, dsts in ambiguous:
-        print(
-            f"  warning: changelog status {src!r} mapped to several field names "
-            f"{dsts} — picked the most common",
-            file=sys.stderr,
+        ui.warn(
+            f"changelog status {src!r} maps to several field names {dsts}; picked the most common"
         )
     unmapped = sorted(seen_changelog - set(by_source))
     return aliases, unmapped

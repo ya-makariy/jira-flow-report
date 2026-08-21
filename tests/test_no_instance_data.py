@@ -26,6 +26,7 @@ ALLOWED_HOSTS = {
     "example.com",
     "www.example.com",
     "github.com",
+    "api.github.com",
     "docs.astral.sh",
     "code.claude.com",
     "opensource.org",
