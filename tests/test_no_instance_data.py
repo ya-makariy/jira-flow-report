@@ -68,6 +68,12 @@ EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
 TICKET_RE = re.compile(r"\b([A-Z][A-Z0-9]{1,9})-\d+\b")
 
 
+# This module necessarily spells out patterns resembling what it hunts for: the
+# ticket-key regex source contains a character class whose text is itself
+# key-shaped, so the pattern matches its own definition. The gate skips itself.
+SELF = Path(__file__).resolve()
+
+
 def tracked_text_files() -> list[Path]:
     out = subprocess.run(
         ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
@@ -75,7 +81,7 @@ def tracked_text_files() -> list[Path]:
     keep = []
     for rel in out:
         p = REPO / rel
-        if not p.is_file() or p.suffix in {".lock"}:
+        if not p.is_file() or p.suffix in {".lock"} or p.resolve() == SELF:
             continue
         try:
             p.read_text()
