@@ -16,6 +16,12 @@ from rich.text import Text
 from jira_flow_report import buildinfo
 
 TAGLINE = "Kanban flow reports for any Jira board"
+
+# One definition for the terminal palette. prompts.py imports these, so the
+# tick, the cursor and every ✓ in the output cannot drift apart.
+ACCENT = "#22d3ee"  # cursor, prompt marks, the product name
+MARK = "#22c55e"  # "done" / "this one is chosen"
+MUTED = "#898781"
 NO_BANNER_ENV = "JIRA_FLOW_REPORT_NO_BANNER"
 
 
@@ -42,7 +48,7 @@ def banner(*, force: bool = False) -> None:
         return
     info = buildinfo.get()
     c = err()
-    name = Text("jira-flow-report", style="bold #22d3ee")
+    name = Text("jira-flow-report", style=f"bold {ACCENT}")
     name.append("  ")
     name.append(TAGLINE, style="default")
     c.print()
@@ -56,7 +62,7 @@ def rule(label: str) -> None:
 
 
 def ok(msg: str) -> None:
-    err().print(f"[green]✓[/green] {msg}")
+    err().print(f"[{MARK}]✓[/{MARK}] {msg}")
 
 
 def info(msg: str) -> None:

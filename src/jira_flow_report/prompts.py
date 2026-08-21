@@ -14,9 +14,11 @@ from prompt_toolkit.styles import Style
 
 from jira_flow_report import ui
 
-ACCENT = "#22d3ee"  # cursor and prompt marks
-MARK = "#22c55e"  # "this one is chosen"
-MUTED = "#898781"
+# Single-sourced in ui.py so the prompt colours and the output colours agree;
+# two copies of a hex value are two chances for them to drift.
+ACCENT = ui.ACCENT
+MARK = ui.MARK
+MUTED = ui.MUTED
 
 # `noreverse` matters: prompt_toolkit's own default for class:selected is a
 # reverse-video block, and setting only `fg:` leaves the inversion in place. The
