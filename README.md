@@ -305,6 +305,12 @@ Other stage counts fall back to even spacing over the same ramp. If you change
   the link can read — check before sharing.
 - Nothing is sent anywhere except your Jira host.
 
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, the four invariants CI enforces,
+and what to run before opening a PR. Maintainers: [docs/REVIEWING.md](docs/REVIEWING.md)
+for merge criteria, [docs/RELEASING.md](docs/RELEASING.md) for cutting a release.
+
 ## Development
 
 ```bash
@@ -353,7 +359,7 @@ If you change `--stages`, revalidate the colour ramp (see **Colour**).
 
 ## Releasing
 
-Tagging is the whole procedure:
+Full procedure in [docs/RELEASING.md](docs/RELEASING.md). Tagging is the whole of it:
 
 ```bash
 git tag v0.3.0 && git push --tags
