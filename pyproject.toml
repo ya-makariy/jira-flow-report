@@ -5,11 +5,25 @@ description = "Kanban flow reports for any Jira board, and a Claude skill that d
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["jira", "kanban", "retrospective", "reporting", "claude", "agent-skill"]
+# No "License :: OSI Approved" classifier: PyPI rejects license classifiers when
+# the PEP 639 `license` expression is set, and the expression is the modern form.
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3 :: Only",
   "Topic :: Office/Business",
+  "Topic :: Software Development :: Bug Tracking",
+  "Topic :: Utilities",
 ]
 dependencies = [
   "jira>=3.8",
@@ -23,6 +37,9 @@ jira-flow-report = "jira_flow_report.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ya-makariy/jira-flow-report"
+Repository = "https://github.com/ya-makariy/jira-flow-report"
+Issues = "https://github.com/ya-makariy/jira-flow-report/issues"
+Changelog = "https://github.com/ya-makariy/jira-flow-report/releases"
 
 [dependency-groups]
 dev = ["pytest>=8", "pyyaml>=6", "ruff>=0.16"]

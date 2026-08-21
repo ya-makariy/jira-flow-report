@@ -41,21 +41,31 @@ Three things a board will not tell you, and this will:
 
 ## Install
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
+Python 3.11+. Either package manager works:
+
+```bash
+uv tool install jira-flow-report      # recommended: isolated, on PATH
+pipx install jira-flow-report         # same idea, without uv
+pip install jira-flow-report          # into the current environment
+```
+
+Run it once without installing anything:
+
+```bash
+uvx jira-flow-report status
+```
+
+`uv tool` and `pipx` are the right choice for a CLI: the tool and its
+dependencies land in their own environment instead of whatever `pip` happens to
+be pointing at. Plain `pip install` works too — you just get `jira-flow-report`
+on the PATH of that environment only.
+
+Unreleased code, or a fork:
 
 ```bash
 uv tool install git+https://github.com/ya-makariy/jira-flow-report
-```
+pip install     git+https://github.com/ya-makariy/jira-flow-report
 
-Or run it without installing:
-
-```bash
-uvx --from git+https://github.com/ya-makariy/jira-flow-report jira-flow-report init
-```
-
-From a checkout:
-
-```bash
 git clone https://github.com/ya-makariy/jira-flow-report && cd jira-flow-report
 uv tool install .
 ```
@@ -340,6 +350,25 @@ fails silently:
   would publish the very thing it guards.
 
 If you change `--stages`, revalidate the colour ramp (see **Colour**).
+
+## Releasing
+
+Tagging is the whole procedure:
+
+```bash
+git tag v0.3.0 && git push --tags
+```
+
+`release.yml` then checks that the tag matches the project version, runs the full
+suite and the linters, builds, verifies the build stamp, publishes to PyPI, and
+cuts a GitHub release with the artefacts attached.
+
+Publishing uses [PyPI Trusted
+Publishing](https://docs.pypi.org/trusted-publishers/): PyPI verifies the
+workflow's OIDC identity, so there is no API token in the repository or its
+secrets. The tag/version guard exists because a mismatch is unrecoverable — PyPI
+never lets a version number be reused, so publishing `0.2.0` from a tag that says
+`v0.3.0` cannot be undone, only yanked.
 
 ## Licence
 

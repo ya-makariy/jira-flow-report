@@ -42,7 +42,7 @@ def banner(*, force: bool = False) -> None:
         return
     info = buildinfo.get()
     c = err()
-    name = Text("jira-flow-report", style="bold #2a78d6")
+    name = Text("jira-flow-report", style="bold #22d3ee")
     name.append("  ")
     name.append(TAGLINE, style="default")
     c.print()

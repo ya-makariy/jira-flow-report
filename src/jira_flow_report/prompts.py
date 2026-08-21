@@ -14,20 +14,55 @@ from prompt_toolkit.styles import Style
 
 from jira_flow_report import ui
 
-# Muted, so the answer is what stands out rather than the chrome.
+ACCENT = "#22d3ee"  # cursor and prompt marks
+MARK = "#22c55e"  # "this one is chosen"
+MUTED = "#898781"
+
+# `noreverse` matters: prompt_toolkit's own default for class:selected is a
+# reverse-video block, and setting only `fg:` leaves the inversion in place. The
+# selected state is carried by the green check, not by repainting the label.
 STYLE = Style(
     [
-        ("qmark", "fg:#2a78d6 bold"),
+        ("qmark", f"fg:{ACCENT} bold"),
         ("question", "bold"),
-        ("answer", "fg:#1baf7a bold"),
-        ("pointer", "fg:#2a78d6 bold"),
-        ("highlighted", "fg:#2a78d6 bold"),
-        ("selected", "fg:#1baf7a"),
-        ("instruction", "fg:#898781"),
-        ("text", ""),
-        ("disabled", "fg:#898781 italic"),
+        ("answer", f"fg:{MARK} bold"),
+        ("pointer", f"fg:{ACCENT} bold"),
+        ("highlighted", f"fg:{ACCENT} bold noreverse"),
+        ("selected", f"fg:{MARK} bold noreverse"),
+        ("instruction", f"fg:{MUTED}"),
+        ("text", "noreverse"),
+        ("disabled", f"fg:{MUTED} italic"),
     ]
 )
+
+# A tick beside the option instead of a highlighted label. The unselected marker
+# is blank rather than an empty circle, so the column reads as "what is ticked"
+# rather than as a row of bullets; both are one cell wide, so nothing shifts when
+# you mark something.
+CHECKED = "✓"
+UNCHECKED = " "
+
+
+def _use_check_marks() -> None:
+    """Swap questionary's ●/○ for a tick and a blank.
+
+    The glyphs are module-level names in questionary.prompts.common, imported by
+    value, so rebinding them there is what takes effect. Guarded: if a future
+    questionary drops them, prompts still work with whatever markers it ships.
+    """
+    try:
+        from questionary.prompts import common
+    except ImportError:
+        return
+    for name, glyph in (
+        ("INDICATOR_SELECTED", CHECKED),
+        ("INDICATOR_UNSELECTED", UNCHECKED),
+    ):
+        if hasattr(common, name):
+            setattr(common, name, glyph)
+
+
+_use_check_marks()
 
 
 class Aborted(Exception):
@@ -81,7 +116,12 @@ def select(
     if assume or not ui.interactive():
         _auto(message, options[default][1])
         return options[default][0]
-    choices = [questionary.Choice(title=label, value=value) for value, label in options]
+    # Plain labels here too, for one rule across every prompt: the cursor says
+    # where you are, the green tick says what is chosen, the label is never
+    # repainted to mean either.
+    choices = [
+        questionary.Choice(title=[("class:text", label)], value=value) for value, label in options
+    ]
     return _unwrap(
         questionary.select(
             message,
@@ -107,7 +147,12 @@ def multiselect(
         _auto(message, ", ".join(default))
         return list(default)
     chosen = set(default)
-    choices = [questionary.Choice(title=opt, value=opt, checked=opt in chosen) for opt in options]
+    # A list-valued title is emitted verbatim by questionary, which is the
+    # supported way to stop it repainting the label when the row is selected.
+    choices = [
+        questionary.Choice(title=[("class:text", opt)], value=opt, checked=opt in chosen)
+        for opt in options
+    ]
     answer = _unwrap(
         questionary.checkbox(
             message,

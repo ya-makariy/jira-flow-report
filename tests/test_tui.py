@@ -238,3 +238,78 @@ def test_update_notice_names_what_is_stale(capsys):
     )
     err = capsys.readouterr().err
     assert "2.0" in err and "config changed" in err and "update" in err
+
+
+# --- prompt appearance ---------------------------------------------------------
+
+
+def test_check_marks_replace_questionary_bullets():
+    """Selection is shown by a tick beside the option, not by repainting it."""
+    from questionary.prompts import common
+
+    assert common.INDICATOR_SELECTED == prompts.CHECKED == "✓"
+    assert common.INDICATOR_UNSELECTED == prompts.UNCHECKED == " "
+    # same width, so marking something does not shift the column
+    assert len(prompts.CHECKED) == len(prompts.UNCHECKED) == 1
+
+
+def test_no_style_class_inverts_the_label():
+    """prompt_toolkit's default for class:selected is reverse video, and setting
+    only `fg:` leaves the inversion in place. Every class that paints a label has
+    to say noreverse explicitly."""
+    for cls in ("selected", "highlighted", "text"):
+        assert "noreverse" in _rule_for(cls), f"class:{cls} may render as reverse video"
+
+
+def _rule_for(cls: str) -> str:
+    for name, rule in prompts.STYLE.style_rules:
+        if name == f"class:{cls}" or name == cls:
+            return rule
+    return ""
+
+
+def test_accent_and_mark_colours_are_the_agreed_ones():
+    assert prompts.ACCENT == "#22d3ee"
+    assert prompts.MARK == "#22c55e"
+    assert prompts.MARK in _rule_for("selected")
+    assert prompts.ACCENT in _rule_for("pointer")
+
+
+def test_labels_are_passed_as_token_lists(monkeypatch):
+    """A list-valued title is what stops questionary restyling the label. If a
+    refactor turns these back into plain strings, selection would highlight the
+    text again."""
+    captured = {}
+
+    class FakeQuestion:
+        def ask(self):
+            return ["backend"]
+
+    def fake_checkbox(message, choices, **kwargs):
+        captured["choices"] = choices
+        return FakeQuestion()
+
+    monkeypatch.setattr(ui, "interactive", lambda: True)
+    monkeypatch.setattr(prompts.questionary, "checkbox", fake_checkbox)
+    prompts.multiselect("Labels", ["backend", "ops"], ["backend"])
+    for choice in captured["choices"]:
+        assert isinstance(choice.title, list), "title must be a token list"
+        assert choice.title[0][0] == "class:text"
+
+
+def test_select_labels_are_token_lists_too(monkeypatch):
+    captured = {}
+
+    class FakeQuestion:
+        def ask(self):
+            return "a"
+
+    def fake_select(message, choices, **kwargs):
+        captured["choices"] = choices
+        return FakeQuestion()
+
+    monkeypatch.setattr(ui, "interactive", lambda: True)
+    monkeypatch.setattr(prompts.questionary, "select", fake_select)
+    prompts.select("Which?", [("a", "Alpha"), ("b", "Beta")])
+    for choice in captured["choices"]:
+        assert isinstance(choice.title, list)
