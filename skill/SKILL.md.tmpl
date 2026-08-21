@@ -1,0 +1,112 @@
+---
+name: jira-flow-report
+description: |
+  Build a kanban flow report for a date window: which issues changed status into
+  the working stages during the window, which are still parked in the queued
+  column, and what share of each label (${labels}) is closed — rendered as one
+  donut per label plus a comparison bar and a full issue table. Use for retro
+  prep, sprint/period reviews, "where do our tasks stand", "percent closed by
+  team", "what is stuck". Dates are parameters. Do NOT use to create, edit, or
+  transition issues.
+${frontmatter_extra}---
+
+# jira-flow-report
+
+Three steps, deliberately separate so the slow one runs once:
+
+| Step | Command | Network | What it does |
+|---|---|---|---|
+| 1 | `jira-flow-report collect` | **yes** | Jira → `snapshot.json` (issues + *full* status changelog) |
+| 2 | `scripts/aggregate.py` | no | `snapshot.json` + dates → `report.json` |
+| 3 | `scripts/render.py` | no | `report.json` → `flow.html` |
+
+The snapshot keeps every transition **and** the stage scale and status alias map,
+so any date window can be re-sliced without refetching, and steps 2–3 need no
+config, no network, and no dependencies beyond the standard library.
+
+If a snapshot from this session already exists, reuse it. Re-running step 1 for a
+new window is waste, and it also means two reports in one session disagree
+because the board moved between fetches.
+
+## Arguments
+
+Positional: `from` then `to` (inclusive). Accepts `YYYY-MM-DD` or `DD.MM.YYYY`.
+A date without a year means the most recent past occurrence — say which year you
+read it as. If the user gives only one date, ask which end it is. If they give
+none, ask — do not silently default to "the last two weeks".
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--from` / `--to` | required | the window; a transition inside it selects the issue |
+| `--parked-cutoff DATE` | `--to` minus 4 days | issues that entered the parked column on/after this are **not** counted as stuck. `none` disables |
+| `--parked STATUS` | `${parked}` | the "still sitting there" column |
+| `--restrict LABEL=USER,...` | none | for that label only, keep just these assignees. `unassigned` is a valid entry. Repeatable |
+| `--stages` / `--track` / `--done` | from the snapshot | the stage scale, which transitions select, which stage counts as closed |
+| `--labels` | `${labels}` | chart categories, in display order |
+| `--lang` (render) | `${lang}` | page language |
+
+The `--parked-cutoff` default is a guess, not a rule. **Always state the resolved
+value back to the user** — it silently changes the "stuck" count. A grooming
+batch can move dozens of issues into the parked column in one afternoon, and that
+looks exactly like stagnation. Before trusting a stuck count, group the parked
+issues by (`parked_since`, author): one date plus one author across many issues
+is grooming, not stagnation.
+
+## Running it
+
+${run_block}
+
+## Environment
+
+This board lives at `${server}`. If that host is only reachable from inside a
+private network, step 1 cannot run in a hosted sandbox such as Claude Desktop's
+code interpreter — only steps 2–3 can. In that case either:
+
+1. the user runs step 1 on their own machine and uploads `snapshot.json`; or
+2. a Jira **MCP connector** configured locally pulls the issues, written into the
+   shape `references/snapshot-schema.md` documents.
+
+Check reachability before blaming Jira or the credentials, and name which path is
+needed.
+
+## Reading the output correctly
+
+- The stage shown per issue is its **current** status, not the status it moved
+  into during the window. Say so when presenting. For a window that closed weeks
+  ago this matters a lot: "% closed" then means "closed by now", not "closed by
+  the end of the window".
+- `--restrict` can invert the picture. A label whose unclosed work all belongs to
+  filtered-out assignees reads as 100% closed. When a restriction is in play,
+  report what it dropped, not just the percentage.
+- An issue with several labels is counted **in each** of its labels, so the sum
+  across labels can differ from the unique issue count. The page states this.
+- `--restrict` is applied **per label**: an issue dropped from one label's chart
+  stays in the others'. Deliberate — a filter on one label must not evict issues
+  from another.
+- Small labels produce meaningless percentages. The page flags any category under
+  5 issues; repeat that caveat in chat rather than quoting the number flat.
+- Statuses outside the configured scale get prepended to it with a warning rather
+  than dropped, so the charts still sum to the row count.
+
+## Configured for this instance
+
+| Setting | Value |
+|---|---|
+| Server | `${server}` |
+| Project | `${project}` |
+| Board | `${board}` |
+| Stage scale | ${stages} |
+| Parked column | `${parked}` |
+| Counts as movement | ${track} |
+| Closed stage | `${done}` |
+| Chart labels | ${labels} |
+
+${aliases_note}
+
+Re-run `jira-flow-report init` if the board's workflow changes; it rediscovers
+all of the above from the API.
+
+## References
+
+- `references/jira-quirks.md` — the Jira traps this tool works around
+- `references/snapshot-schema.md` — the snapshot shape, for the MCP path

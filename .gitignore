@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# report artefacts — these carry real ticket data, never commit them
+snapshot.json
+report.json
+*.html
+*-desktop.zip

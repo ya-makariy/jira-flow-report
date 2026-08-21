@@ -1,0 +1,79 @@
+# Jira traps this tool works around
+
+None of this is specific to one company — it is how Jira behaves. The concrete
+values below were discovered from `${server}` at install time.
+
+## The same status has two spellings
+
+Jira renders status names through its localisation layer in the REST **fields**,
+while the **changelog** keeps the underlying English names. So for one issue:
+
+- `issue.fields.status.name` → the localised name
+- `changelog.histories[].items[].toString` → the English name
+
+Match on one spelling only and you lose every transition of that class **with no
+error**. The remaining rows still look plausible, which is what makes it
+dangerous: on one real 12-day window this silently dropped 50 of 129 selected
+issues before it was caught.
+
+`jira-flow-report init` recovers the mapping empirically instead of hardcoding a
+table: an issue's **last** status transition and its **current** status are by
+definition the same status, so pairing them across a few hundred issues yields
+the map. It is stored in the snapshot, so the offline steps need no config.
+
+Mapping discovered for this instance:
+
+${aliases_table}
+
+A changelog name that never appears as a last transition cannot be mapped this
+way; it is reported under its changelog spelling rather than guessed at.
+
+## Localised names are rejected in JQL
+
+The instance can accept a localised name where the API returns it verbatim and
+still reject it in a search. Two rules that follow:
+
+- filter on `statusCategory` (`new` / `indeterminate` / `Done`) rather than
+  `status` when you can — it sidesteps naming entirely;
+- `issuetype` often needs the English name in JQL even when creation needs the
+  localised one. The two directions catch people out equally.
+
+This tool never puts a status name in JQL. It fetches by project and label and
+does all status work client-side, which is why it is immune to this one.
+
+## Labels are case-sensitive in JQL
+
+`devops`, `devOps` and `DevOps` are three different labels to JQL, and real
+projects accumulate more than one spelling. `collect` fetches every spelling
+variant it was configured with; `aggregate` folds them case-insensitively by
+default (`--no-fold-case` to keep them apart).
+
+## A board filter is not the project
+
+A board shows what its saved filter matches, and that filter usually hides old
+resolved work — something like `resolved >= -14d OR resolution is EMPTY`. A
+report that queries the project by label directly, which this tool does, sees
+**more** than the board does.
+
+That is normally what you want for a period report, but the counts will not match
+what someone reads off the board by eye. Say which one you used.
+
+Board filter for this instance: `${filter_note}`
+
+## Grooming looks exactly like stagnation
+
+A bulk move into the queued column stamps a fresh entry date on every issue it
+touches, so "stuck" counts include freshly groomed work unless you cut it off.
+Set the cutoff too early and you hide real stagnation instead.
+
+Before reporting a stuck count, group the parked issues by (entry date, author).
+One date plus one author across many issues is a grooming batch, not a queue that
+has stopped moving.
+
+## Stage scale for this instance
+
+Read off the board's column configuration at install time, in board order:
+
+${stages_table}
+
+Re-run `jira-flow-report init` after a workflow change.

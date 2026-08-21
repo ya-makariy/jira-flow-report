@@ -1,0 +1,267 @@
+# jira-flow-report
+
+Kanban flow reports for any Jira board — and the [Claude
+skill](https://code.claude.com/docs/en/skills) that drives them.
+
+Pick a date window. Get one donut per label showing what stage that label's work
+is at and what share of it is closed, a 100%-stacked bar so the labels can
+actually be compared, the full issue table, and a written record of every
+selection rule that produced those numbers.
+
+Built for retro prep, where the question is "where does our work actually stand"
+and the answer has to survive someone asking how it was counted.
+
+```
+┌─ backend ──────────┐  ┌─ frontend ─────────┐  ┌─ devops ───────────┐
+│      ╭─────╮       │  │      ╭─────╮       │  │      ╭─────╮       │
+│     │  81%  │      │  │     │  54%  │      │  │     │  50%  │      │
+│      ╰─────╯       │  │      ╰─────╯       │  │      ╰─────╯       │
+│  ■ Selected     1  │  │  ■ Selected     3  │  │  ■ In Progress  2  │
+│  ■ In Progress 10  │  │  ■ In Progress  6  │  │  ■ Testing      1  │
+│  ■ In Review    3  │  │  ■ In Review    3  │  │  ■ Done         3  │
+│  ■ Done        58  │  │  ■ Testing      4  │  └────────────────────┘
+└────────────────────┘  │  ■ Done        19  │
+                        └────────────────────┘
+```
+
+## Why not just read the board
+
+Three things a board will not tell you, and this will:
+
+- **What moved in a period**, not what is on screen now. Selection runs off the
+  changelog, so a window is a real window.
+- **What is stuck versus what was just groomed.** A bulk move into the queued
+  column stamps a fresh date on every issue it touches, which looks exactly like
+  stagnation. There is an explicit cutoff for that, and the report names the
+  value it used.
+- **Percent closed per discipline**, with the filtering rules written on the page
+  rather than living in someone's head.
+
+## Install
+
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
+
+```bash
+uv tool install git+https://github.com/ya-makariy/jira-flow-report
+```
+
+Or run it without installing:
+
+```bash
+uvx --from git+https://github.com/ya-makariy/jira-flow-report jira-flow-report init
+```
+
+From a checkout:
+
+```bash
+git clone https://github.com/ya-makariy/jira-flow-report && cd jira-flow-report
+uv tool install .
+```
+
+### Authentication
+
+The tool reads a personal access token from the environment and never writes it
+to disk:
+
+```bash
+export JIRA_API_TOKEN='...'
+```
+
+On Jira Server / Data Center, create one under **Profile → Personal Access
+Tokens**. On Jira Cloud, use an API token and check that your deployment accepts
+it as a bearer token.
+
+### Setup
+
+```bash
+jira-flow-report init
+```
+
+`init` asks only for what an API cannot tell it — the base URL, which board, and
+which labels are the report's categories — and reads everything else off Jira:
+
+| Discovered | From |
+|---|---|
+| the stage scale, in order | the board's column configuration |
+| each stage's category (queued / in progress / done) | `/rest/api/2/status` |
+| the project key | an issue actually on the board |
+| the label list, with counts | a scan of the project's issues |
+| the board's saved filter | `/rest/api/2/filter/{id}` |
+| **the status name alias map** | paired from issue changelogs — see below |
+
+It writes `~/.config/jira-flow-report/config.toml` (mode 600) and offers to
+install the Claude skill. Re-run it after a workflow change.
+
+Non-interactive, for scripts and agents:
+
+```bash
+jira-flow-report init --server https://jira.example.com --board 42 --yes
+```
+
+## Use
+
+One command for the whole pipeline:
+
+```bash
+jira-flow-report report --from 2026-08-10 --to 2026-08-21 \
+    --parked-cutoff 2026-08-17 \
+    --restrict devops=a.smith,unassigned
+```
+
+Writes `snapshot.json`, `report.json`, `flow.html`. Open the HTML, or hand it to
+Claude to publish.
+
+### The three steps, separately
+
+The slow step is separated on purpose:
+
+| Step | Command | Network | Deps |
+|---|---|---|---|
+| 1 | `jira-flow-report collect` | yes | the `jira` package |
+| 2 | `jira-flow-report aggregate` | no | **stdlib only** |
+| 3 | `jira-flow-report render` | no | **stdlib only** |
+
+```bash
+jira-flow-report collect -o snapshot.json
+jira-flow-report aggregate -i snapshot.json -o report.json \
+    --from 2026-08-10 --to 2026-08-21
+jira-flow-report render -i report.json -o flow.html --lang en
+```
+
+The snapshot holds **every** status transition plus the stage scale and the alias
+map, which buys two things:
+
+- **any window can be re-sliced without refetching** — and two reports built from
+  one snapshot agree with each other, which two separate fetches will not, because
+  the board moves;
+- steps 2 and 3 run **anywhere** — no config, no network, no dependencies. That is
+  what makes the report reproducible on a machine that cannot reach Jira at all.
+
+### What gets selected
+
+An issue is in the report if **either** rule matches:
+
+1. it **transitioned into** one of the tracked stages inside the window, per the
+   changelog; or
+2. it is **still** in the parked column and got there **before**
+   `--parked-cutoff`.
+
+Rule 2 is the one that needs a decision. `--parked-cutoff` defaults to `--to`
+minus 4 days, which is a guess — the report prints the value it used, and so
+should you when you present it.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--from` / `--to` | required | the window, inclusive. `YYYY-MM-DD` or `DD.MM.YYYY` |
+| `--parked-cutoff` | `--to` − 4 days | entries on/after this are not "stuck". `none` disables |
+| `--restrict LABEL=USER,...` | none | for that label only, keep just these assignees. `unassigned` is valid. Repeatable |
+| `--parked` / `--done` | from config | which stage is the queue, which is closed |
+| `--stages` / `--track` | from config | the scale, and which transitions select |
+| `--labels` | from config | chart categories, in display order |
+| `--no-fold-case` | off | treat `devops` and `devOps` as different labels |
+| `--lang` | from config | `en` or `ru` |
+
+`--restrict` applies **per label**. An issue tagged both `backend` and `devops`
+that fails the `devops` restriction still counts in `backend` — a filter on one
+label must not evict issues from another. Everything it drops is listed on the
+page.
+
+## Reading the output honestly
+
+The report is designed to be hard to misread, but three things still need saying
+out loud when you present it:
+
+- **The stage is the issue's status *now*,** not its status at the end of the
+  window. Report a window that closed weeks ago and "% closed" means "closed by
+  today". That is a different question from "closed by the end of the window".
+- **`--restrict` can invert the picture.** If a label's unclosed work all belongs
+  to filtered-out assignees, that label reads 100% closed. Report what the filter
+  dropped, not just the percentage.
+- **Small labels give meaningless percentages.** Anything under 5 issues is
+  flagged on the page. Do not quote "33% closed" off a base of 3.
+
+An issue with several labels is counted in each of them, so the per-label total
+can exceed the unique issue count. Statuses outside the configured scale are
+prepended to it with a warning rather than dropped, so the charts always sum to
+the row count.
+
+## The status-name trap
+
+Jira renders status names through its localisation layer in the REST **fields**
+while the **changelog** keeps the underlying English names. The same status can
+therefore arrive spelled two ways:
+
+```python
+issue.fields.status.name                        # 'Готово'
+changelog.histories[-1].items[0].toString       # 'Done'
+```
+
+Match on one spelling and you lose every transition of that class **with no
+error** — the surviving rows still look plausible. On one real 12-day window this
+silently dropped 50 of 129 issues.
+
+Rather than shipping a lookup table, `init` derives the map from the data: an
+issue's **last** status transition and its **current** status are by definition
+the same status, so pairing them across a few hundred issues recovers the mapping
+and flags anything ambiguous. It lands in the snapshot, so the offline steps
+inherit it.
+
+## The Claude skill
+
+```bash
+jira-flow-report install                     # ~/.claude/skills/jira-flow-report
+jira-flow-report install --desktop-zip       # zip for Claude Desktop
+```
+
+The skill is **generated from your config**, so its documentation names your
+server, board, stage scale and alias map instead of placeholders. In Claude Code:
+
+```
+/jira-flow-report 10.08 21.08 --restrict devops=a.smith,unassigned
+```
+
+It tells the model how to pick dates, when to reuse an existing snapshot, and
+which of the caveats above to repeat in chat. Restart Claude Code after
+installing.
+
+For **Claude Desktop**, upload the zip under *Settings → Capabilities → Skills*.
+Its `SKILL.md` differs deliberately: if your Jira is only reachable from a private
+network, step 1 cannot run in a hosted sandbox, so the Desktop copy documents the
+two paths that do work — upload a `snapshot.json`, or pull through a locally
+configured Jira MCP connector. Steps 2 and 3 run in the sandbox unchanged, which
+is the whole reason they are dependency-free.
+
+## Colour
+
+Stages are an **ordered** scale, so the charts use an ordinal single-hue ramp, not
+categorical hues — the further along the scale, the further along the flow. The
+5-stage default is validated in both light and dark: monotone lightness, visible
+step gaps, and the step nearest the surface still clearing 2:1 contrast. Dark mode
+reverses the ramp so the closing stage is the lightest step on a dark ground.
+
+Other stage counts fall back to even spacing over the same ramp. If you change
+`--stages`, revalidate.
+
+## Privacy
+
+- The token lives in the environment, never in the config file.
+- `snapshot.json`, `report.json` and `*.html` carry real ticket data, summaries
+  and usernames. They are in `.gitignore`. Published HTML is a page anyone with
+  the link can read — check before sharing.
+- Nothing is sent anywhere except your Jira host.
+
+## Development
+
+```bash
+uv sync
+uv run pytest
+uv run jira-flow-report --help
+```
+
+`aggregate.py` and `render.py` must stay import-free of the rest of the package
+and of anything outside the standard library — that constraint is what lets them
+run in a sandbox, and there is a test that enforces it.
+
+## Licence
+
+MIT

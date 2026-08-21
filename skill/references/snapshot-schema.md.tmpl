@@ -1,0 +1,60 @@
+# snapshot.json
+
+What `jira-flow-report collect` writes and `aggregate.py` reads. Produce this
+shape by any route — the Jira REST API, an MCP connector, a CSV export you
+reshape — and steps 2 and 3 work unchanged.
+
+```json
+{
+  "schema": 1,
+  "server":  "${server}",
+  "project": "${project}",
+  "board":   ${board_json},
+  "jql":     "<the query used>",
+  "labels":  ${labels_json},
+  "stages":  ${stages_json},
+  "parked":  "${parked}",
+  "track":   ${track_json},
+  "done":    "${done}",
+  "status_aliases": ${aliases_json},
+  "issues": [
+    {
+      "key":      "${sample_key}",
+      "summary":  "<one line>",
+      "labels":   ${sample_labels},
+      "status":   "${done}",
+      "assignee": "<username or null>",
+      "created":  "2026-01-31T10:14:22.000+0000",
+      "history": [
+        {"at": "2026-02-01T09:02:11.000+0000", "by": "<username>",
+         "from": "${parked}", "to": "<next status>"}
+      ]
+    }
+  ]
+}
+```
+
+Field notes:
+
+- `status` — the **current** status, spelled the way the REST fields spell it
+  (which may be localised).
+- `history` — **only** `status` changelog items, ascending by `at`. Other field
+  changes are dropped at collect time. `from`/`to` are spelled the way the
+  changelog spells them, which may differ from the field spelling;
+  `status_aliases` maps one onto the other.
+- `status_aliases` — `{"<changelog spelling>": "<field spelling>"}`. Only
+  genuinely differing pairs are listed; anything absent is used as-is. Discovered
+  at collect time, never hardcoded.
+- `stages` / `parked` / `track` / `done` — the stage scale and its roles, so the
+  offline steps need no config file. CLI flags override them.
+- `history` may be empty: an issue created straight into a status and never moved.
+  `aggregate.py` then falls back to `created` for the parked-since date.
+- `assignee` — the username as your Jira spells it (Jira Server uses `name`,
+  Jira Cloud an account id), or `null` for unassigned.
+- `at` and `created` — only the first 10 characters are read, so any ISO-8601
+  form works and the timezone is ignored. A transition just after midnight lands
+  on the date its string carries.
+- `labels` keeps the original case; folding happens during aggregation.
+
+Minimum viable issue record: `key`, `summary`, `labels`, `status`, `assignee`,
+`created`, `history`. Anything else in the object is ignored.
