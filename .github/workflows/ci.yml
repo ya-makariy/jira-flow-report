@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: nothing here needs to write to the repo.
+permissions:
+  contents: read
+
+# A new push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"          # fail rather than silently resolving around the lockfile
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: Lockfile is current
+        run: uv lock --check
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+      - name: ruff format
+        run: uv run ruff format --check --diff .
+
+  test:
+    name: test (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      # the instance-data gate reads `git ls-files`, so it needs a real checkout
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv sync
+      - run: uv run pytest
+
+  offline-scripts:
+    # aggregate.py and render.py must run with nothing installed. That is what
+    # lets a sandbox with no network and no packages still produce the report,
+    # so it is checked on a bare interpreter rather than in the project venv.
+    name: offline scripts on a bare interpreter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Build an empty venv, so the check cannot be vacuous
+        # Not the runner's interpreter: whatever an image happens to preinstall
+        # would quietly satisfy an import this test is supposed to prove absent.
+        run: |
+          set -euo pipefail
+          python -m venv --without-pip .bare
+          if .bare/bin/python -c "import jira" 2>/dev/null; then
+            echo "the empty venv is not empty"; exit 1
+          fi
+          .bare/bin/python -c "import tomllib, json, html, math; print('stdlib present')"
+      - name: aggregate.py and render.py run standalone
+        run: |
+          set -euo pipefail
+          cp src/jira_flow_report/aggregate.py src/jira_flow_report/render.py .
+          python - <<'PY'
+          import json
+
+          snap = {
+              "schema": 1, "server": "https://jira.example.com", "project": "ABC",
+              "board": 1, "jql": "project = ABC",
+              "labels": ["backend", "frontend"],
+              "stages": ["Backlog", "Queued", "Doing", "Review", "Shipped"],
+              "parked": "Queued", "track": ["Doing", "Review", "Shipped"],
+              "done": "Shipped", "status_aliases": {"InProgress": "Doing"},
+              "issues": [
+                  {"key": "ABC-1", "summary": "one", "labels": ["backend"],
+                   "status": "Shipped", "assignee": "u1",
+                   "created": "2026-01-01T00:00:00.000+0000",
+                   "history": [{"at": "2026-03-02T10:00:00.000+0000", "by": "u1",
+                                "from": "Queued", "to": "Shipped"}]},
+                  {"key": "ABC-2", "summary": "two", "labels": ["frontend"],
+                   "status": "Doing", "assignee": None,
+                   "created": "2026-01-01T00:00:00.000+0000",
+                   "history": [{"at": "2026-03-03T10:00:00.000+0000", "by": "u1",
+                                "from": "Queued", "to": "InProgress"}]},
+              ],
+          }
+          with open("snapshot.json", "w") as fh:
+              json.dump(snap, fh)
+          PY
+          .bare/bin/python aggregate.py -i snapshot.json -o report.json \
+              --from 2026-03-01 --to 2026-03-31
+          .bare/bin/python render.py -i report.json -o flow.en.html --lang en
+          .bare/bin/python render.py -i report.json -o flow.ru.html --lang ru
+          grep -q "<title>" flow.en.html
+          grep -q "prefers-color-scheme" flow.en.html
+          test -s flow.ru.html
+          echo "offline path OK"
+
+  build:
+    name: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv build
+      - name: Metadata is well formed
+        run: uvx twine check dist/*
+      - name: The skill templates are inside the wheel
+        # install.py reads them at runtime; a missing force-include only shows up
+        # when someone installs from a wheel rather than from a checkout.
+        run: |
+          set -euo pipefail
+          wheel=$(ls dist/*.whl)
+          python -m zipfile -l "$wheel" | grep -F 'jira_flow_report/skill/SKILL.md.tmpl'
+          python -m zipfile -l "$wheel" | grep -F 'jira_flow_report/skill/references/'
+      - name: Generate a skill from the built wheel
+        run: |
+          set -euo pipefail
+          cat > cfg.toml <<'TOML'
+          server = "https://jira.example.com"
+          project = "ABC"
+          board = 42
+          labels = ["backend", "frontend"]
+          stages = ["Backlog", "Queued", "Doing", "Review", "Shipped"]
+          parked = "Queued"
+          done = "Shipped"
+          track = ["Doing", "Review", "Shipped"]
+          lang = "en"
+          [status_aliases]
+          InProgress = "Doing"
+          TOML
+          # uvx runs the wheel's entry point without depending on PATH setup
+          JIRA_FLOW_REPORT_CONFIG="$PWD/cfg.toml" \
+            uvx --from "$(ls dist/*.whl)" jira-flow-report \
+              install --desktop-zip-only --desktop-zip bundle.zip
+          python -m zipfile -l bundle.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            dist/*
+            bundle.zip
+          retention-days: 14

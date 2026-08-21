@@ -23,14 +23,65 @@ jira-flow-report = "jira_flow_report.cli:main"
 Homepage = "https://github.com/ya-makariy/jira-flow-report"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pyyaml>=6", "ruff>=0.16"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+# Declared explicitly: otherwise sdist contents depend on VCS state and on
+# whatever untracked files happen to be lying in the tree.
+include = ["src", "skill", "tests", "pyproject.toml", "README.md", "LICENSE"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jira_flow_report"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "skill" = "jira_flow_report/skill"
+
+[tool.ruff]
+# Pinned deliberately: CI must not shift when ruff changes its defaults.
+line-length = 100
+target-version = "py311"
+# ruff formats fenced Python inside Markdown. The README aligns a snippet on
+# purpose to contrast two spellings of one status, so keep the formatter off prose.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",    # pycodestyle
+  "F",         # pyflakes
+  "I",         # import order
+  "UP",        # pyupgrade
+  "B",         # bugbear
+  "SIM",       # simplify
+  "C4",        # comprehensions
+  "RET",       # return style
+  "DTZ",       # naive datetimes
+  "BLE",       # blind except
+  "EXE",       # shebang / exec bit agreement
+  "ISC",       # implicit str concat
+  "PIE",
+  "PLW",       # pylint warnings
+  "RUF",
+]
+ignore = [
+  "E501",      # line length is handled by the formatter
+  "RET504",    # a named result before return is often clearer
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests build fixtures inline and assert on them; these rules fight that.
+"tests/*" = ["S101", "PLW0603"]
+# render.py holds the localised UI strings. RUF001 exists to catch homoglyph
+# lookalikes; Cyrillic in a Russian translation table is the intended content,
+# and the status names it prints come from Jira verbatim.
+"src/jira_flow_report/render.py" = ["RUF001"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"

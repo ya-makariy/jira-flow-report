@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Actions drift and get deprecated; this is the one that actually breaks CI.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: deps
+    groups:
+      dev:
+        dependency-type: development

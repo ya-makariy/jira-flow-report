@@ -1,5 +1,7 @@
 # jira-flow-report
 
+[![CI](https://github.com/ya-makariy/jira-flow-report/actions/workflows/ci.yml/badge.svg)](https://github.com/ya-makariy/jira-flow-report/actions/workflows/ci.yml)
+
 Kanban flow reports for any Jira board — and the [Claude
 skill](https://code.claude.com/docs/en/skills) that drives them.
 
@@ -254,13 +256,36 @@ Other stage counts fall back to even spacing over the same ramp. If you change
 
 ```bash
 uv sync
-uv run pytest
+uv run pytest              # 58 tests, all offline
+uv run ruff check .
+uv run ruff format .
 uv run jira-flow-report --help
 ```
 
-`aggregate.py` and `render.py` must stay import-free of the rest of the package
-and of anything outside the standard library — that constraint is what lets them
-run in a sandbox, and there is a test that enforces it.
+CI runs exactly those commands, plus a build, across Python 3.11–3.14. Nothing in
+the suite touches the network or needs a Jira, so it all runs on a laptop in
+under a second.
+
+Three invariants are enforced by tests rather than by review, because each one
+fails silently:
+
+- **`aggregate.py` and `render.py` import nothing but the standard library.**
+  Checked by walking their ASTs, by running them as loose scripts, and in CI by
+  running them inside a `venv --without-pip`. Break it and the sandbox path stops
+  working without any local symptom.
+- **The generated skill is valid.** Every `${placeholder}` resolves, the
+  frontmatter parses and carries a usable `name`/`description`, the Desktop
+  variant keeps only portable keys, the shipped scripts are byte-identical to the
+  package copies, and every subcommand and `references/…` path the docs mention
+  actually exists. A malformed `SKILL.md` does not error — Claude just silently
+  does not load it.
+- **No instance data in the tree.** `tests/test_no_instance_data.py` scans every
+  tracked file for non-example hostnames, private and CGNAT addresses, real email
+  domains and Jira-key-shaped tokens, and asserts snapshots and reports stay
+  gitignored. The gate is written generically: an allowlist naming real companies
+  would publish the very thing it guards.
+
+If you change `--stages`, revalidate the colour ramp (see **Colour**).
 
 ## Licence
 

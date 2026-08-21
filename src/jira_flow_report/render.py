@@ -10,6 +10,7 @@ nearest the surface still clearing 2:1); dark mode reverses the ramp so the
 closing stage is the lightest step on a dark ground. Other stage counts fall
 back to even spacing over the same ramp — revalidate if you change --stages.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,10 +19,31 @@ import json
 import math
 import sys
 
-RAMP_L = ["#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6",
-          "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
-RAMP_D = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7",
-          "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"]
+RAMP_L = [
+    "#86b6ef",
+    "#6da7ec",
+    "#5598e7",
+    "#3987e5",
+    "#2a78d6",
+    "#256abf",
+    "#1c5cab",
+    "#184f95",
+    "#104281",
+    "#0d366b",
+]
+RAMP_D = [
+    "#cde2fb",
+    "#b7d3f6",
+    "#9ec5f4",
+    "#86b6ef",
+    "#6da7ec",
+    "#5598e7",
+    "#3987e5",
+    "#2a78d6",
+    "#256abf",
+    "#1c5cab",
+    "#184f95",
+]
 VALIDATED_L = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]
 VALIDATED_D = ["#184f95", "#256abf", "#3987e5", "#86b6ef", "#b7d3f6"]
 
@@ -29,143 +51,162 @@ STRINGS = {
     "en": {
         "title": "{project} board flow",
         "heading": "Where the work stands",
-        "sub": ("{total} issues moved into {track} inside this window — or are still "
-                "sitting in “{parked}”. Below: the stage each one is at "
-                "<b>now</b>, broken down by label."),
-        "kpi_closed": "closed ({done})", "kpi_total": "issues in scope",
-        "kpi_mid": "in intermediate stages", "kpi_parked": "parked in {parked}",
+        "sub": (
+            "{total} issues moved into {track} inside this window — or are still "
+            "sitting in “{parked}”. Below: the stage each one is at "
+            "<b>now</b>, broken down by label."
+        ),
+        "kpi_closed": "closed ({done})",
+        "kpi_total": "issues in scope",
+        "kpi_mid": "in intermediate stages",
+        "kpi_parked": "parked in {parked}",
         "by_label": "By label",
-        "by_label_desc": ("The closed share is in the middle of each ring. The ring reads "
-                          "in stage order: the further along the scale, the further along "
-                          "the flow."),
+        "by_label_desc": (
+            "The closed share is in the middle of each ring. The ring reads "
+            "in stage order: the further along the scale, the further along "
+            "the flow."
+        ),
         "compare": "Label comparison",
-        "compare_desc": ("Rings compare poorly against each other — the same data on one "
-                         "scale, 100% per row."),
-        "all_issues": "All {total} issues", "all_desc": "Sorted by stage, unclosed first.",
+        "compare_desc": (
+            "Rings compare poorly against each other — the same data on one scale, 100% per row."
+        ),
+        "all_issues": "All {total} issues",
+        "all_desc": "Sorted by stage, unclosed first.",
         "th": ["Issue", "Summary", "Label", "Stage now", "Assignee", "Note"],
         "parked_since": "parked in “{parked}” since {since}",
-        "closed": "closed", "issues_short": "issues",
-        "how": "How this was built", "rules": "Selection rules",
-        "rule_1": ("An issue is in scope if it <b>transitioned</b> into {track} between "
-                   "{d0} and {d1}, per the changelog."),
-        "rule_2": ("Plus issues <b>still</b> in “{parked}”. Entry cutoff: "
-                   "<code>{cutoff}</code> — issues that landed there later are excluded."),
+        "closed": "closed",
+        "issues_short": "issues",
+        "how": "How this was built",
+        "rules": "Selection rules",
+        "rule_1": (
+            "An issue is in scope if it <b>transitioned</b> into {track} between "
+            "{d0} and {d1}, per the changelog."
+        ),
+        "rule_2": (
+            "Plus issues <b>still</b> in “{parked}”. Entry cutoff: "
+            "<code>{cutoff}</code> — issues that landed there later are excluded."
+        ),
         "rule_restrict": "For label <b>{label}</b>, only <code>{users}</code> are counted.",
-        "rule_now": ("The stage on the charts is each issue's <b>current</b> status, not "
-                     "the status it moved into during the window."),
-        "parked_head": "Parked in “{parked}”", "parked_none": "None.",
+        "rule_now": (
+            "The stage on the charts is each issue's <b>current</b> status, not "
+            "the status it moved into during the window."
+        ),
+        "parked_head": "Parked in “{parked}”",
+        "parked_none": "None.",
         "excluded_head": "Dropped by --restrict ({n})",
-        "kept_in": "(still counted in {cats})", "dropped": "(dropped entirely)",
+        "kept_in": "(still counted in {cats})",
+        "dropped": "(dropped entirely)",
         "caveats": "Caveats",
-        "cav_multi": ("An issue with several labels is counted in each of them, so the "
-                      "per-label total ({sum}) can differ from the unique issue count "
-                      "({total})."),
-        "cav_alias": ("The changelog and the REST fields can spell the same status "
-                      "differently; the mapping was discovered from the data, not "
-                      "hardcoded."),
+        "cav_multi": (
+            "An issue with several labels is counted in each of them, so the "
+            "per-label total ({sum}) can differ from the unique issue count "
+            "({total})."
+        ),
+        "cav_alias": (
+            "The changelog and the REST fields can spell the same status "
+            "differently; the mapping was discovered from the data, not "
+            "hardcoded."
+        ),
         "cav_live": "A snapshot is a moment in time; the board moves on.",
         "cav_extra": "Statuses outside the configured scale, prepended to it: <code>{extra}</code>.",
         "cav_jql": "Query: <code>{jql}</code>",
         "small_n": "Small sample — a percentage on this few issues is not meaningful.",
-        "only": "Only counted: {users}.", "no_issues": "No issues match the selection.",
+        "only": "Only counted: {users}.",
+        "no_issues": "No issues match the selection.",
         "unassigned": "unassigned",
     },
     "ru": {
         "title": "Поток доски {project}",
         "heading": "Где стоят задачи",
-        "sub": ("{total} задач сменили "
-                "статус на {track} в этом "
-                "окне — либо так и "
-                "остались висеть в "
-                "«{parked}». Ниже: на каком "
-                "этапе каждая из них "
-                "находится <b>сейчас</b>, "
-                "в разрезе тегов."),
+        "sub": (
+            "{total} задач сменили "
+            "статус на {track} в этом "
+            "окне — либо так и "
+            "остались висеть в "
+            "«{parked}». Ниже: на каком "
+            "этапе каждая из них "
+            "находится <b>сейчас</b>, "
+            "в разрезе тегов."
+        ),
         "kpi_closed": "закрыто ({done})",
         "kpi_total": "задач в выборке",
         "kpi_mid": "в промежуточных этапах",
         "kpi_parked": "висят в {parked}",
         "by_label": "По тегам",
-        "by_label_desc": ("Доля закрытого — "
-                          "в центре каждой "
-                          "диаграммы. Кольцо "
-                          "читается по порядку "
-                          "этапов: чем дальше "
-                          "сегмент по шкале, "
-                          "тем дальше задача "
-                          "по потоку."),
+        "by_label_desc": (
+            "Доля закрытого — "
+            "в центре каждой "
+            "диаграммы. Кольцо "
+            "читается по порядку "
+            "этапов: чем дальше "
+            "сегмент по шкале, "
+            "тем дальше задача "
+            "по потоку."
+        ),
         "compare": "Сравнение тегов",
-        "compare_desc": ("Кольца плохо "
-                         "сравниваются между "
-                         "собой — здесь те же "
-                         "данные в один "
-                         "масштаб, 100% на каждую "
-                         "строку."),
+        "compare_desc": (
+            "Кольца плохо "
+            "сравниваются между "
+            "собой — здесь те же "
+            "данные в один "
+            "масштаб, 100% на каждую "
+            "строку."
+        ),
         "all_issues": "Все {total} задач",
-        "all_desc": ("Отсортировано по "
-                     "этапу — незакрытое "
-                     "сверху."),
-        "th": ["Задача", "Название",
-               "Тег", "Этап сейчас",
-               "Исполнитель",
-               "Примечание"],
+        "all_desc": ("Отсортировано по этапу — незакрытое сверху."),
+        "th": ["Задача", "Название", "Тег", "Этап сейчас", "Исполнитель", "Примечание"],
         "parked_since": "висит в «{parked}» с {since}",
         "closed": "закрыто",
         "issues_short": "задач",
         "how": "Как собрано",
         "rules": "Правила выборки",
-        "rule_1": ("Задача попала в "
-                   "выборку, если "
-                   "<b>переходила</b> в {track} "
-                   "с {d0} по {d1} (по changelog)."),
-        "rule_2": ("Плюс задачи, "
-                   "<b>оставшиеся</b> в «{parked}». "
-                   "Отсечка попадания "
-                   "туда: <code>{cutoff}</code> — задачи, "
-                   "попавшие позже, не "
-                   "учтены."),
-        "rule_restrict": ("Для тега <b>{label}</b> "
-                          "учтены только "
-                          "<code>{users}</code>."),
-        "rule_now": ("Этап на диаграммах "
-                     "— <b>текущий</b> статус "
-                     "задачи, а не тот, в "
-                     "который она "
-                     "переходила."),
+        "rule_1": (
+            "Задача попала в "
+            "выборку, если "
+            "<b>переходила</b> в {track} "
+            "с {d0} по {d1} (по changelog)."
+        ),
+        "rule_2": (
+            "Плюс задачи, "
+            "<b>оставшиеся</b> в «{parked}». "
+            "Отсечка попадания "
+            "туда: <code>{cutoff}</code> — задачи, "
+            "попавшие позже, не "
+            "учтены."
+        ),
+        "rule_restrict": ("Для тега <b>{label}</b> учтены только <code>{users}</code>."),
+        "rule_now": (
+            "Этап на диаграммах — <b>текущий</b> статус задачи, а не тот, в который она переходила."
+        ),
         "parked_head": "Висят в «{parked}»",
         "parked_none": "Нет таких задач.",
         "excluded_head": "Отброшено правилом --restrict ({n})",
         "kept_in": "(учтена в {cats})",
         "dropped": "(исключена полностью)",
         "caveats": "Оговорки",
-        "cav_multi": ("Задача с несколькими "
-                      "тегами считается в "
-                      "каждом своём теге, "
-                      "поэтому сумма по "
-                      "тегам ({sum}) может "
-                      "отличаться от числа "
-                      "уникальных задач ({total})."),
-        "cav_alias": ("В changelog и в полях API один и "
-                      "тот же статус может "
-                      "называться по-разному; "
-                      "соответствие "
-                      "определено из данных, "
-                      "а не зашито в код."),
-        "cav_live": ("Данные — срез на "
-                     "момент выгрузки; "
-                     "доска живёт и цифры "
-                     "смещаются."),
-        "cav_extra": ("Статусы вне заданной "
-                      "шкалы, добавлены в "
-                      "её начало: <code>{extra}</code>."),
+        "cav_multi": (
+            "Задача с несколькими "
+            "тегами считается в "
+            "каждом своём теге, "
+            "поэтому сумма по "
+            "тегам ({sum}) может "
+            "отличаться от числа "
+            "уникальных задач ({total})."
+        ),
+        "cav_alias": (
+            "В changelog и в полях API один и "
+            "тот же статус может "
+            "называться по-разному; "
+            "соответствие "
+            "определено из данных, "
+            "а не зашито в код."
+        ),
+        "cav_live": ("Данные — срез на момент выгрузки; доска живёт и цифры смещаются."),
+        "cav_extra": ("Статусы вне заданной шкалы, добавлены в её начало: <code>{extra}</code>."),
         "cav_jql": "Запрос: <code>{jql}</code>",
-        "small_n": ("Малая выборка — "
-                    "проценты на такой "
-                    "базе не "
-                    "показательны."),
+        "small_n": ("Малая выборка — проценты на такой базе не показательны."),
         "only": "Учтены только: {users}.",
-        "no_issues": ("Нет задач под "
-                      "критерии выборки."),
+        "no_issues": ("Нет задач под критерии выборки."),
         "unassigned": "не назначена",
     },
 }
@@ -174,7 +215,10 @@ STRINGS = {
 def ramp(n: int):
     if n == 5:
         return VALIDATED_L, VALIDATED_D
-    pick = lambda r: [r[round(i * (len(r) - 1) / max(n - 1, 1))] for i in range(n)]  # noqa: E731
+
+    def pick(steps):
+        return [steps[round(i * (len(steps) - 1) / max(n - 1, 1))] for i in range(n)]
+
     return pick(RAMP_L), list(reversed(pick(RAMP_D)))
 
 
@@ -185,18 +229,23 @@ def donut(counts, total, size=196):
         if n:
             seg = C * n / total
             vis = max(seg - gap, 0.8)
-            parts.append(f'<circle class="seg" cx="50" cy="50" r="38" fill="none" '
-                         f'stroke="var(--st{i})" stroke-width="11" '
-                         f'stroke-dasharray="{vis:.2f} {C - vis:.2f}" '
-                         f'stroke-dashoffset="{-off:.2f}"></circle>')
+            parts.append(
+                f'<circle class="seg" cx="50" cy="50" r="38" fill="none" '
+                f'stroke="var(--st{i})" stroke-width="11" '
+                f'stroke-dasharray="{vis:.2f} {C - vis:.2f}" '
+                f'stroke-dashoffset="{-off:.2f}"></circle>'
+            )
         off += C * n / total
-    return (f'<svg viewBox="0 0 100 100" width="{size}" height="{size}" aria-hidden="true" '
-            f'style="transform:rotate(-90deg)">' + "".join(parts) + "</svg>")
+    return (
+        f'<svg viewBox="0 0 100 100" width="{size}" height="{size}" aria-hidden="true" '
+        f'style="transform:rotate(-90deg)">' + "".join(parts) + "</svg>"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="render", description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        prog="render", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("-i", "--report", default="report.json")
     p.add_argument("-o", "--out", default="flow.html")
     p.add_argument("--lang", default="en", choices=sorted(STRINGS))
@@ -222,7 +271,10 @@ def main(argv: list[str] | None = None) -> int:
     di = ST.index(DONE)
     L, DK = ramp(len(ST))
     w0, w1 = M["window"]
-    fmt = lambda s: ".".join(reversed(s.split("-")))  # noqa: E731
+
+    def fmt(iso):
+        return ".".join(reversed(iso.split("-")))
+
     proj = M.get("project") or "Jira"
     quo = (lambda s: f"“{s}”") if a.lang == "en" else (lambda s: f"«{s}»")
     tracklist = ", ".join(quo(e(t)) for t in M["track"])
@@ -236,18 +288,25 @@ def main(argv: list[str] | None = None) -> int:
             c = d["cats"][cat]
             tot, cnt = c["total"], c["counts"]
             if not tot:
-                out.append(f'<article class="card"><header class="ch"><h3>{e(cat)}</h3>'
-                           f'<span class="tot">0 {T["issues_short"]}</span></header>'
-                           f'<p class="smalln">{T["no_issues"]}</p></article>')
+                out.append(
+                    f'<article class="card"><header class="ch"><h3>{e(cat)}</h3>'
+                    f'<span class="tot">0 {T["issues_short"]}</span></header>'
+                    f'<p class="smalln">{T["no_issues"]}</p></article>'
+                )
                 continue
             legend = "".join(
                 f'<li><span class="sw" style="background:var(--st{i})"></span>'
                 f'<span class="lb">{e(ST[i])}</span><span class="ct">{n}</span>'
                 f'<span class="pc">{n / tot * 100:.0f}%</span></li>'
-                for i, n in enumerate(cnt) if n)
+                for i, n in enumerate(cnt)
+                if n
+            )
             warn = f'<p class="smalln">{T["small_n"]}</p>' if tot < 5 else ""
-            note = (f'<p class="smalln">{T["only"].format(users=e(", ".join(M["restrict"][cat])))}</p>'
-                    if cat in M["restrict"] else "")
+            note = (
+                f'<p class="smalln">{T["only"].format(users=e(", ".join(M["restrict"][cat])))}</p>'
+                if cat in M["restrict"]
+                else ""
+            )
             out.append(
                 f'<article class="card">\n'
                 f'  <header class="ch"><h3>{e(cat)}</h3>'
@@ -255,13 +314,14 @@ def main(argv: list[str] | None = None) -> int:
                 f'  <div class="dwrap">{donut(cnt, tot)}\n'
                 f'    <div class="center"><strong>{cnt[di] / tot * 100:.0f}'
                 f'<span class="pctsign">%</span></strong><span>{T["closed"]}</span></div>\n'
-                f'  </div>\n  <ul class="legend">{legend}</ul>{warn}{note}\n</article>')
+                f'  </div>\n  <ul class="legend">{legend}</ul>{warn}{note}\n</article>'
+            )
         return "\n".join(out)
 
     def stacked():
         out = []
         allrow = "__all__"
-        for cat in CATS + [allrow]:
+        for cat in [*CATS, allrow]:
             src = A if cat == allrow else d["cats"][cat]
             tot, cnt = src["total"], src["counts"]
             if not tot:
@@ -269,13 +329,16 @@ def main(argv: list[str] | None = None) -> int:
             segs = "".join(
                 f'<span class="sseg" style="flex:{n};background:var(--st{i})" '
                 f'title="{e(ST[i])}: {n} ({n / tot * 100:.0f}%)"></span>'
-                for i, n in enumerate(cnt) if n)
-            name = ("all labels" if a.lang == "en" else "все теги") \
-                if cat == allrow else cat
-            out.append(f'<div class="srow{" total" if cat == allrow else ""}">'
-                       f'<span class="sname">{e(name)}</span>'
-                       f'<div class="sbar">{segs}</div>'
-                       f'<span class="sdone">{cnt[di] / tot * 100:.0f}%</span></div>')
+                for i, n in enumerate(cnt)
+                if n
+            )
+            name = ("all labels" if a.lang == "en" else "все теги") if cat == allrow else cat
+            out.append(
+                f'<div class="srow{" total" if cat == allrow else ""}">'
+                f'<span class="sname">{e(name)}</span>'
+                f'<div class="sbar">{segs}</div>'
+                f'<span class="sdone">{cnt[di] / tot * 100:.0f}%</span></div>'
+            )
         return "\n".join(out)
 
     def link(key):
@@ -286,41 +349,62 @@ def main(argv: list[str] | None = None) -> int:
         for r in d["table"]:
             i = ST.index(r["status"])
             chips = "".join(f'<span class="chip">{e(c)}</span>' for c in r["shown_cats"])
-            note = (T["parked_since"].format(parked=e(M["parked"]), since=r["parked_since"])
-                    if r["reason"] == "parked" else "")
+            note = (
+                T["parked_since"].format(parked=e(M["parked"]), since=r["parked_since"])
+                if r["reason"] == "parked"
+                else ""
+            )
             out.append(
                 f'<tr><td class="k">{link(r["key"])}</td>'
                 f'<td class="sm">{e(r["summary"][:70])}</td><td>{chips}</td>'
                 f'<td><span class="dot" style="background:var(--st{i})"></span>{e(r["status"])}</td>'
                 f'<td class="as">{e(r["assignee"] or "—")}</td>'
-                f'<td class="nt">{note}</td></tr>')
+                f'<td class="nt">{note}</td></tr>'
+            )
         return "\n".join(out)
 
-    parked = "".join(
-        f'<li>{link(s["key"])} — {s["since"]}, {e(", ".join(s["cats"]))}, '
-        f'{e(s["assignee"] or T["unassigned"])} — {e(s["summary"][:60])}</li>'
-        for s in d["parked_list"]) or f"<li>{T['parked_none']}</li>"
+    parked = (
+        "".join(
+            f"<li>{link(s['key'])} — {s['since']}, {e(', '.join(s['cats']))}, "
+            f"{e(s['assignee'] or T['unassigned'])} — {e(s['summary'][:60])}</li>"
+            for s in d["parked_list"]
+        )
+        or f"<li>{T['parked_none']}</li>"
+    )
     exc = "".join(
-        f'<li>{link(x["key"])} — {e(x["assignee"] or T["unassigned"])} <em>'
+        f"<li>{link(x['key'])} — {e(x['assignee'] or T['unassigned'])} <em>"
         + (T["kept_in"].format(cats=e(", ".join(x["kept_in"]))) if x["kept_in"] else T["dropped"])
-        + "</em></li>" for x in d["excluded"])
-    exc_block = (f'<div class="note"><h3>{T["excluded_head"].format(n=len(d["excluded"]))}</h3>'
-                 f"<ul>{exc}</ul></div>" if d["excluded"] else "")
-    rules = "".join(f'<li>{T["rule_restrict"].format(label=e(k), users=e(", ".join(v)))}</li>'
-                    for k, v in M["restrict"].items())
-    extra_note = (f'<li>{T["cav_extra"].format(extra=e(", ".join(M.get("extra_stages") or [])))}</li>'
-                  if M.get("extra_stages") else "")
-    jql_note = f'<li>{T["cav_jql"].format(jql=e(M["jql"]))}</li>' if M.get("jql") else ""
+        + "</em></li>"
+        for x in d["excluded"]
+    )
+    exc_block = (
+        f'<div class="note"><h3>{T["excluded_head"].format(n=len(d["excluded"]))}</h3>'
+        f"<ul>{exc}</ul></div>"
+        if d["excluded"]
+        else ""
+    )
+    rules = "".join(
+        f"<li>{T['rule_restrict'].format(label=e(k), users=e(', '.join(v)))}</li>"
+        for k, v in M["restrict"].items()
+    )
+    extra_note = (
+        f"<li>{T['cav_extra'].format(extra=e(', '.join(M.get('extra_stages') or [])))}</li>"
+        if M.get("extra_stages")
+        else ""
+    )
+    jql_note = f"<li>{T['cav_jql'].format(jql=e(M['jql']))}</li>" if M.get("jql") else ""
     sum_cats = sum(d["cats"][c]["total"] for c in CATS)
     inflight = sum(A["counts"][ST.index(t)] for t in M["track"] if t in ST and t != DONE)
     tl = "".join(f"--st{i}:{c};" for i, c in enumerate(L))
     td = "".join(f"--st{i}:{c};" for i, c in enumerate(DK))
-    keylegend = "".join(f'<div><span class="sw" style="background:var(--st{i})"></span>{e(s)}</div>'
-                        for i, s in enumerate(ST))
+    keylegend = "".join(
+        f'<div><span class="sw" style="background:var(--st{i})"></span>{e(s)}</div>'
+        for i, s in enumerate(ST)
+    )
     th = "".join(f"<th>{e(x)}</th>" for x in T["th"])
     board = f" · board {M['board']}" if M.get("board") else ""
 
-    HTML = f'''<title>{e(title)}</title>
+    HTML = f"""<title>{e(title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root {{
@@ -481,7 +565,7 @@ a:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
   </div>
 </section>
 </div>
-'''
+"""
     with open(a.out, "w") as fh:
         fh.write(HTML)
     print(f"{a.out} written ({len(HTML)} bytes)", file=sys.stderr)

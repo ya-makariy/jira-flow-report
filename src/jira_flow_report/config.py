@@ -1,4 +1,5 @@
 """Config file handling. Nothing about any particular Jira lives in the code."""
+
 from __future__ import annotations
 
 import os

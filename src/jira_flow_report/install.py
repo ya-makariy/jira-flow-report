@@ -1,6 +1,7 @@
 """Render the skill from templates and install it, for Claude Code or as a
 Claude Desktop zip. All instance-specific values come from the config, so the
 templates in the repository stay generic."""
+
 from __future__ import annotations
 
 import json
@@ -52,14 +53,15 @@ Report the headline numbers in chat as well — total, percent closed, and what
 is stuck — because handing over a file or a link does not answer the question.
 """
 
-FRONTMATTER_CODE = ('argument-hint: "[from] [to] [--parked-cutoff DATE] '
-                    '[--restrict LABEL=USER,...]"\nallowed-tools: Bash, Read, Write, Edit, Artifact\n')
+FRONTMATTER_CODE = (
+    'argument-hint: "[from] [to] [--parked-cutoff DATE] '
+    '[--restrict LABEL=USER,...]"\nallowed-tools: Bash, Read, Write, Edit, Artifact\n'
+)
 
 
 def template_dir() -> Path:
     """Works both from an installed wheel and from a source checkout."""
-    for cand in (Path(__file__).parent / "skill",
-                 Path(__file__).parent.parent.parent / "skill"):
+    for cand in (Path(__file__).parent / "skill", Path(__file__).parent.parent.parent / "skill"):
         if (cand / "SKILL.md.tmpl").exists():
             return cand
     sys.exit("Cannot locate the skill templates. Reinstall the package.")
@@ -73,22 +75,28 @@ def build_vars(cfg: dict, target: str) -> dict:
     aliases = cfg.get("status_aliases") or {}
     if aliases:
         rows = "\n".join(f"| `{k}` | `{v}` |" for k, v in sorted(aliases.items()))
-        aliases_table = ("| Changelog spelling | Field spelling |\n|---|---|\n" + rows)
+        aliases_table = "| Changelog spelling | Field spelling |\n|---|---|\n" + rows
         aliases_note = (
             "The changelog and the REST fields spell some statuses differently on this "
             "instance — the mapping was discovered from the data and travels inside the "
-            "snapshot. See `references/jira-quirks.md`.")
+            "snapshot. See `references/jira-quirks.md`."
+        )
     else:
-        aliases_table = ("_No differing spellings were observed — the changelog and the "
-                         "fields agree on this instance._")
-        aliases_note = ("No status spelling differences were observed on this instance, so "
-                        "no alias mapping is applied.")
+        aliases_table = (
+            "_No differing spellings were observed — the changelog and the "
+            "fields agree on this instance._"
+        )
+        aliases_note = (
+            "No status spelling differences were observed on this instance, so "
+            "no alias mapping is applied."
+        )
     stages = cfg.get("stages") or []
     stage_meta = cfg.get("stage_meta") or []
     if stage_meta:
-        stages_table = ("| # | Status | Category | Board column |\n|---|---|---|---|\n"
-                        + "\n".join(f"| {i} | `{s['name']}` | {s['category']} | {s['column']} |"
-                                    for i, s in enumerate(stage_meta, 1)))
+        stages_table = "| # | Status | Category | Board column |\n|---|---|---|---|\n" + "\n".join(
+            f"| {i} | `{s['name']}` | {s['category']} | {s['column']} |"
+            for i, s in enumerate(stage_meta, 1)
+        )
     else:
         stages_table = "\n".join(f"{i}. `{s}`" for i, s in enumerate(stages, 1)) or "_not set_"
     labels = cfg.get("labels") or []
@@ -121,6 +129,7 @@ def build_vars(cfg: dict, target: str) -> dict:
 def render_skill(cfg: dict, dest: Path, target: str) -> None:
     tdir = template_dir()
     v = build_vars(cfg, target)
+
     # two passes: run_block itself carries ${lang}
     def sub(text: str) -> str:
         out = string.Template(text).safe_substitute(v)
@@ -166,6 +175,5 @@ def run(args) -> int:
     for m in made:
         print(f"installed: {m}")
     if not args.desktop_zip_only:
-        print("\nRestart Claude Code (or start a new session) for /jira-flow-report "
-              "to appear.")
+        print("\nRestart Claude Code (or start a new session) for /jira-flow-report to appear.")
     return 0
