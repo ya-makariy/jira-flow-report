@@ -95,58 +95,76 @@ def discover_project(client, server, board_id: int) -> str | None:
 def discover_labels(client, project: str, limit: int = 1500) -> collections.Counter:
     cnt: collections.Counter = collections.Counter()
     start = 0
-    while start < limit:
-        batch = client.search_issues(
-            f"project = {project}", startAt=start, maxResults=100, fields="labels"
-        )
-        if not batch:
-            break
-        for i in batch:
-            cnt.update(i.fields.labels)
-        start += len(batch)
-        if len(batch) < 100:
-            break
+    with ui.progress(f"scanning {project} for labels") as tick:
+        while start < limit:
+            batch = client.search_issues(
+                f"project = {project}", startAt=start, maxResults=100, fields="labels"
+            )
+            if not batch:
+                break
+            for i in batch:
+                cnt.update(i.fields.labels)
+            start += len(batch)
+            tick(f"scanning {project} for labels: {start} issues, {len(cnt)} distinct")
+            if len(batch) < 100:
+                break
     return cnt
 
 
-def discover_status_aliases(client, project: str, sample: int = 300) -> tuple[dict, list]:
+def discover_status_aliases(
+    client, project: str, sample: int = 300, stages: list[str] | None = None
+) -> tuple[dict, list]:
     """Recover the changelog spelling -> field spelling map, empirically.
 
     Jira can render statuses localised in the REST fields while the changelog
     keeps English names. An issue's LAST status transition and its CURRENT status
     are by definition the same status, so pairing them yields the map with no
     hardcoded table. Returns (aliases, unmapped_changelog_names).
+
+    `expand=changelog` is expensive -- measured at roughly 20x a plain page, and
+    up to 12s for 50 issues -- so when `stages` is given this stops as soon as
+    every stage on the board has been observed, which in practice is one or two
+    pages rather than six.
     """
     pairs: collections.Counter = collections.Counter()
     seen_changelog: set[str] = set()
+    want = set(stages or ())
     start = 0
-    while start < sample:
-        batch = client.search_issues(
-            f"project = {project} ORDER BY updated DESC",
-            startAt=start,
-            maxResults=50,
-            expand="changelog",
-            fields="status",
-        )
-        if not batch:
-            break
-        for i in batch:
-            hist = sorted(
-                (
-                    (h.created, it.fromString, it.toString)
-                    for h in i.changelog.histories
-                    for it in h.items
-                    if it.field == "status"
-                ),
-                key=lambda x: x[0],
+    with ui.progress("discovering status spellings from changelogs") as tick:
+        while start < sample:
+            batch = client.search_issues(
+                f"project = {project} ORDER BY updated DESC",
+                startAt=start,
+                maxResults=50,
+                expand="changelog",
+                fields="status",
             )
-            for _, f, t in hist:
-                seen_changelog.update(x for x in (f, t) if x)
-            if hist:
-                pairs[(hist[-1][2], i.fields.status.name)] += 1
-        start += len(batch)
-        if len(batch) < 50:
-            break
+            if not batch:
+                break
+            for i in batch:
+                hist = sorted(
+                    (
+                        (h.created, it.fromString, it.toString)
+                        for h in i.changelog.histories
+                        for it in h.items
+                        if it.field == "status"
+                    ),
+                    key=lambda x: x[0],
+                )
+                for _, f, t in hist:
+                    seen_changelog.update(x for x in (f, t) if x)
+                if hist:
+                    pairs[(hist[-1][2], i.fields.status.name)] += 1
+            start += len(batch)
+            covered = {dst for _src, dst in pairs}
+            tick(
+                f"discovering status spellings: {start} issues, "
+                f"{len(covered)}/{len(want) or '?'} stages seen"
+            )
+            if want and want <= covered:
+                break
+            if len(batch) < 50:
+                break
 
     by_source: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for (src, dst), n in pairs.items():

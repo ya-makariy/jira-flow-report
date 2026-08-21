@@ -6,8 +6,10 @@ steps are routinely piped, and chrome on stdout would corrupt them.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
+from collections.abc import Iterator
 from functools import lru_cache
 
 from rich.console import Console
@@ -92,3 +94,21 @@ def update_notice(status) -> None:
         c.print(f"  [yellow]↑[/yellow] {line}")
     c.print("  [dim]run[/dim] jira-flow-report update")
     c.print()
+
+
+@contextlib.contextmanager
+def progress(message: str) -> Iterator:
+    """Show that a slow step is alive.
+
+    Yields an `update(text)` callable. On a terminal this drives a spinner in
+    place; piped, each update becomes its own line so a log still shows movement.
+    Silence is the thing being fixed here: a step that prints once and then works
+    for half a minute reads as a hang.
+    """
+    if sys.stderr.isatty():
+        status = err().status(f"[dim]{message}[/dim]", spinner="dots", spinner_style=ACCENT)
+        with status:
+            yield lambda text: status.update(f"[dim]{text}[/dim]")
+    else:
+        info(message)
+        yield info

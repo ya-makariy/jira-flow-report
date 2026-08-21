@@ -53,7 +53,6 @@ def cmd_init(args) -> int:
         with contextlib.suppress(Exception):  # the filter JQL is a nice-to-have
             board_filter = client.filter(board["filter_id"]).jql
 
-    print("\nscanning labels ...")
     counts = discover.discover_labels(client, project)
     if not counts:
         sys.exit(
@@ -80,8 +79,9 @@ def cmd_init(args) -> int:
         )
     fetch_labels = sorted({lab for lab in options if lab.lower() in {x.lower() for x in labels}})
 
-    print("\ndiscovering status spellings from changelogs ...")
-    aliases, unmapped = discover.discover_status_aliases(client, project)
+    # stages come from the board above, so discovery can stop as soon as it has
+    # seen every one of them instead of grinding through a fixed sample
+    aliases, unmapped = discover.discover_status_aliases(client, project, stages=stages)
     if aliases:
         for k, v in sorted(aliases.items()):
             print(f"    changelog {k!r} == field {v!r}")

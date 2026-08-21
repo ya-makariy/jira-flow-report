@@ -313,3 +313,91 @@ def test_select_labels_are_token_lists_too(monkeypatch):
     prompts.select("Which?", [("a", "Alpha"), ("b", "Beta")])
     for choice in captured["choices"]:
         assert isinstance(choice.title, list)
+
+
+# --- slow-step behaviour -------------------------------------------------------
+
+
+def test_timeout_defaults_and_overrides(monkeypatch, tmp_path):
+    from jira_flow_report import config
+
+    monkeypatch.setattr(config, "load", lambda *_a, **_k: {})
+    monkeypatch.delenv(config.TIMEOUT_ENV, raising=False)
+    assert config.timeout() == config.DEFAULT_TIMEOUT
+
+    monkeypatch.setenv(config.TIMEOUT_ENV, "5")
+    assert config.timeout() == 5.0
+
+    # explicitly disabled -- None is what the library wants for "wait forever"
+    monkeypatch.setenv(config.TIMEOUT_ENV, "0")
+    assert config.timeout() is None
+
+    # junk must not crash a command that only wanted to talk to Jira
+    monkeypatch.setenv(config.TIMEOUT_ENV, "soon")
+    assert config.timeout() == config.DEFAULT_TIMEOUT
+
+
+def test_timeout_comes_from_config_when_env_is_unset(monkeypatch):
+    from jira_flow_report import config
+
+    monkeypatch.delenv(config.TIMEOUT_ENV, raising=False)
+    monkeypatch.setattr(config, "load", lambda *_a, **_k: {"timeout": 12})
+    assert config.timeout() == 12.0
+
+
+def test_progress_yields_an_update_callable_without_a_terminal(capsys):
+    with ui.progress("working") as tick:
+        tick("working: 1 of 2")
+    err = capsys.readouterr().err
+    assert "working" in err and "1 of 2" in err
+
+
+class _FakeIssue:
+    def __init__(self, current, last_to):
+        self.fields = type("F", (), {"status": type("S", (), {"name": current})()})()
+        item = type("I", (), {"field": "status", "fromString": None, "toString": last_to})()
+        hist = type("H", (), {"created": "2026-01-01T00:00:00.000+0000", "items": [item]})()
+        self.changelog = type("C", (), {"histories": [hist]})()
+
+
+class _FakeClient:
+    """Counts pages so the early exit can be observed."""
+
+    def __init__(self, pages):
+        self.pages = pages
+        self.calls = 0
+
+    def search_issues(self, _jql, startAt=0, maxResults=50, **_kw):
+        self.calls += 1
+        index = startAt // maxResults
+        return self.pages[index] if index < len(self.pages) else []
+
+
+def test_alias_discovery_stops_once_every_stage_is_seen():
+    """expand=changelog is the expensive call; stop asking once the map is complete."""
+    from jira_flow_report import discover
+
+    page1 = [_FakeIssue("Doing", "InProgress")] * 50
+    page2 = [_FakeIssue("Shipped", "Finished")] * 50
+    page3 = [_FakeIssue("Doing", "InProgress")] * 50
+    client = _FakeClient([page1, page2, page3])
+    aliases, _ = discover.discover_status_aliases(client, "ABC", stages=["Doing", "Shipped"])
+    assert aliases == {"InProgress": "Doing", "Finished": "Shipped"}
+    assert client.calls == 2, "should have stopped after both stages were mapped"
+
+
+def test_alias_discovery_without_stages_walks_the_whole_sample():
+    from jira_flow_report import discover
+
+    pages = [[_FakeIssue("Doing", "InProgress")] * 50 for _ in range(6)]
+    client = _FakeClient(pages)
+    discover.discover_status_aliases(client, "ABC", sample=300)
+    assert client.calls == 6
+
+
+def test_alias_discovery_stops_early_on_a_short_page():
+    from jira_flow_report import discover
+
+    client = _FakeClient([[_FakeIssue("Doing", "InProgress")] * 10])
+    discover.discover_status_aliases(client, "ABC", stages=["Doing", "Never seen"])
+    assert client.calls == 1, "a short page means there is nothing more to fetch"

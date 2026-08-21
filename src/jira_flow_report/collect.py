@@ -77,8 +77,9 @@ def run(args) -> int:
     if args.rediscover_aliases or not aliases:
         from jira_flow_report import discover
 
-        print("discovering status aliases from changelogs...", file=sys.stderr)
-        aliases, unmapped = discover.discover_status_aliases(client, project)
+        aliases, unmapped = discover.discover_status_aliases(
+            client, project, stages=cfg.get("stages")
+        )
         if unmapped:
             print(
                 f"  note: no field-name mapping observed for {unmapped} — "

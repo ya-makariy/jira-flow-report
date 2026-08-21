@@ -9,6 +9,11 @@ from pathlib import Path
 
 CONFIG_ENV = "JIRA_FLOW_REPORT_CONFIG"
 TOKEN_ENV = "JIRA_API_TOKEN"
+TIMEOUT_ENV = "JIRA_FLOW_REPORT_TIMEOUT"
+# Generous on purpose: a changelog-expanded page of 50 issues has been
+# measured at 12s on a healthy server. This exists to end a stalled
+# connection, not to police a slow query.
+DEFAULT_TIMEOUT = 60.0
 SERVER_ENV = "JIRA_SERVER"
 
 
@@ -68,4 +73,19 @@ def client(server: str | None = None):
         server = os.environ.get(SERVER_ENV) or load().get("server")
     if not server:
         sys.exit("No Jira server known. Run: jira-flow-report init")
-    return JIRA(server=server, token_auth=token())
+    # Without a timeout the library waits forever, and with max_retries=3 it does
+    # so up to four times without saying anything -- which is indistinguishable
+    # from the process being wedged.
+    return JIRA(server=server, token_auth=token(), timeout=timeout())
+
+
+def timeout() -> float:
+    """Per-request HTTP timeout in seconds. 0 or negative disables it."""
+    raw = os.environ.get(TIMEOUT_ENV)
+    if raw is None:
+        raw = str(load(required=False).get("timeout", DEFAULT_TIMEOUT))
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_TIMEOUT
+    return value if value > 0 else None
