@@ -41,8 +41,16 @@ a patch. Bump `schema` in the payload at the same time.
 
 ## 3. Bump and verify
 
-Edit `version` in `pyproject.toml`. Then run exactly what CI runs, so a failure
-costs seconds instead of a burnt version number:
+Edit `version` in `pyproject.toml`, then refresh the lockfile — it records the
+project's own version, so the bump makes it stale and `uv lock --check` will fail
+until you do:
+
+```bash
+uv lock
+```
+
+Now run exactly what CI runs, so a failure costs seconds instead of a burnt
+version number:
 
 ```bash
 uv lock --check
