@@ -13,3 +13,6 @@ report.json
 *.html
 *-desktop.zip
 _build.py
+
+# local agent config and runbooks — deliberately not shared
+.claude/
