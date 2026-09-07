@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import locale
 import subprocess
 import sys
 from pathlib import Path
@@ -492,7 +493,7 @@ def rendered(tmp_path):
 @pytest.mark.parametrize("lang", ["en", "ru"])
 def test_render_produces_a_themed_page(rendered, lang):
     h = rendered("--lang", lang)
-    assert h.startswith("<title>")
+    assert "<title>" in h
     # all three theme states must be covered
     assert "prefers-color-scheme:dark" in h
     assert ':root[data-theme="dark"]' in h
@@ -513,6 +514,47 @@ def test_palette_flag_reaches_the_page(rendered):
     assert render.DONE_L not in mono and render.FLIGHT_L[0] not in mono
     assert "the further along the scale" in mono
     assert "the further along the scale" not in status
+
+
+def test_page_declares_its_encoding_first(rendered):
+    """The page is UTF-8 and carries no HTTP header when it is opened off disk,
+    which is the whole point of a self-contained report. Without the declaration
+    the browser falls back to its locale default and every multi-byte character
+    breaks — the typographic quotes and em dashes in the English page too, not
+    just the Russian. It has to be the first tag: <title> is parsed before the
+    encoding settles, so a late declaration still loses the tab name."""
+    assert rendered().startswith('<meta charset="utf-8">\n<title>')
+
+
+def test_pipeline_files_are_utf8_whatever_the_locale_says(tmp_path, monkeypatch):
+    """Regression: every step used the locale encoding. On a machine whose locale
+    is not UTF-8 — Windows, or a container with LC_ALL=C — writing a Russian
+    status name raised UnicodeEncodeError, and a snapshot written on one machine
+    could not be read on another. "Steps 2 and 3 run anywhere" has to survive a
+    locale, not only a missing network."""
+    monkeypatch.setattr(locale, "getpreferredencoding", lambda do_setlocale=True: "ascii")
+    snap = write_snap(
+        tmp_path,
+        [
+            issue(
+                "ABC-1", ["backend"], "Doing", [("2026-03-02T10:00:00.000+0000", "Queued", "Doing")]
+            )
+        ],
+        stages=["Очередь", "Doing", "Готово"],
+        parked="Очередь",
+        done="Готово",
+        track=["Doing", "Готово"],
+        status_aliases={},
+    )
+    rep, out = tmp_path / "report.json", tmp_path / "flow.html"
+    assert (
+        aggregate.main(
+            ["-i", str(snap), "-o", str(rep), "--from", "2026-03-01", "--to", "2026-03-31"]
+        )
+        == 0
+    )
+    assert render.main(["-i", str(rep), "-o", str(out), "--lang", "ru"]) == 0
+    assert "Очередь" in out.read_text(encoding="utf-8")
 
 
 def test_render_escapes_summaries(tmp_path):

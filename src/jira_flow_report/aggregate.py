@@ -99,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
     try:
-        with open(a.snapshot) as fh:
+        with open(a.snapshot, encoding="utf-8") as fh:
             snap = json.load(fh)
     except FileNotFoundError:
         sys.exit(f"No snapshot at {a.snapshot}. Run: jira-flow-report collect")
@@ -334,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     rep["table"] = sorted(uniq.values(), key=lambda r: (STAGES.index(r["status"]), r["key"]))
 
-    with open(a.out, "w") as fh:
+    with open(a.out, "w", encoding="utf-8") as fh:
         json.dump(rep, fh, ensure_ascii=False, indent=1)
 
     print(f"window {D_FROM}..{D_TO}   parked-cutoff {cutoff_note}", file=sys.stderr)

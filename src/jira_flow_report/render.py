@@ -371,7 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
     try:
-        with open(a.report) as fh:
+        with open(a.report, encoding="utf-8") as fh:
             d = json.load(fh)
     except FileNotFoundError:
         sys.exit(f"No report at {a.report}. Run: jira-flow-report aggregate")
@@ -519,7 +519,15 @@ def main(argv: list[str] | None = None) -> int:
     th = "".join(f"<th>{e(x)}</th>" for x in T["th"])
     board = f" · board {M['board']}" if M.get("board") else ""
 
-    HTML = f"""<title>{e(title)}</title>
+    # First tag in the file, and it has to be: the page is written as UTF-8 but
+    # carries no HTTP header when it is opened off disk, which is the whole point
+    # of a self-contained report. Without this the browser falls back to its
+    # locale default — windows-1252 on most machines — and every multi-byte
+    # character breaks. Not just the Russian: the typographic quotes, the em
+    # dashes and the middots in the English page go too, and <title> is parsed
+    # before the encoding settles, so the tab name breaks with them.
+    HTML = f"""<meta charset="utf-8">
+<title>{e(title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root {{
@@ -681,7 +689,7 @@ a:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
 </section>
 </div>
 """
-    with open(a.out, "w") as fh:
+    with open(a.out, "w", encoding="utf-8") as fh:
         fh.write(HTML)
     print(f"{a.out} written ({len(HTML)} bytes)", file=sys.stderr)
     return 0
