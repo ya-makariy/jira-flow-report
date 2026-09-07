@@ -3,8 +3,8 @@
 
 Standalone by design: stdlib only, no imports from this package, no network.
 
-Colour: see ramp() — stages are coloured by the role they play (not started /
-in flight / closed), not by position on one ramp alone.
+Colour: see ramp() — two palettes, --palette status (each stage the colour of
+the job it is doing) and --palette mono (one blue ordinal ramp).
 """
 
 from __future__ import annotations
@@ -51,25 +51,39 @@ RAMP_D = [
 # Warm greys for the stages nothing has moved out of yet: the parked column,
 # plus any status prepended to the scale ahead of it. Warm rather than dead
 # neutral so they belong to the same page as the paper and the body ink, and so
-# they separate from the cool blues by hue as well as by lightness.
+# they separate from the cool marks by hue as well as by lightness.
 #
-# Written outward from the anchor rather than end to end, because the common
-# case is a single neutral stage and it has to land on the legible middle grey,
-# not on a ramp endpoint. Earlier stages step away from the anchor toward the
-# surface. A board with more than three statuses stacked ahead of its parked
-# column reuses the last step — there is no fourth grey on this surface that is
-# still a visible mark.
-NEUTRAL_L = ["#8e8578", "#aba398", "#c8c1b9"]
-NEUTRAL_D = ["#a79d90", "#7e7364", "#5c5040"]
+# The anchor is deliberately faint — 2.2:1 on the light surface, the quietest
+# mark on the page, because "nothing has happened here" should not shout. That
+# leaves nowhere fainter to go, so the rarer stages prepended ahead of it step
+# the other way, toward more contrast, rather than fading into the paper. Beyond
+# three the last step repeats.
+NEUTRAL_L = ["#b2aba2", "#938b7f", "#746a5d"]
+NEUTRAL_D = ["#70685c", "#90887c", "#b1aa9f"]
 
-# A board with a single in-flight stage has no ramp to walk, so it takes the
-# middle of the ramp rather than whichever end comes first.
-FLIGHT_1_L, FLIGHT_1_D = "#56779d", "#6789b0"
+# Hues for the in-flight stages under the "status" palette, in fixed order:
+# blue, amber, red, violet. On the usual board that is In Progress / In Review /
+# Testing, which is where the order comes from — amber for "waiting on someone",
+# red for "being broken on purpose".
+#
+# Four is the cap, not an arbitrary stopping point. Muting costs chroma, chroma
+# is most of the distance between two hues, and a fifth and sixth muted hue
+# cannot be added without some pair dropping below the point where full-colour
+# readers can separate them (teal against the green, rose against the violet,
+# measured both ways). A board with more in-flight stages than this falls back
+# to the ordinal ramp for that group; grey and green keep their roles.
+FLIGHT_L = ["#4579b2", "#be9f50", "#91362f", "#9f7bba"]
+FLIGHT_D = ["#5c91cc", "#d7b768", "#af4d45", "#b28dcd"]
 
-# Closed. A muted forest green, and the same one in both modes: it clears 4.8:1
-# on the light surface and 3.5:1 on the dark, so there is nothing to gain by
-# splitting it, and one green is one less thing to keep in step.
-DONE_C = "#3d7d4d"
+# Closed. A muted green, split by mode: it has to sit far enough from the red
+# next to it in lightness that red-green colour blindness still separates them,
+# and the red is not at the same lightness in both modes.
+DONE_L, DONE_D = "#579766", "#6fb07d"
+
+# "status" gives each stage the colour of the job it is doing; "mono" is the
+# single-hue ordinal ramp this started as, where colour carries the order and
+# nothing else.
+PALETTES = ("status", "mono")
 
 STRINGS = {
     "en": {
@@ -86,6 +100,10 @@ STRINGS = {
         "kpi_parked": "parked in {parked}",
         "by_label": "By label",
         "by_label_desc": (
+            "The closed share is in the middle of each ring. Segments run in "
+            "stage order; each colour names a stage rather than ranking it."
+        ),
+        "by_label_desc_mono": (
             "The closed share is in the middle of each ring. The ring reads "
             "in stage order: the further along the scale, the further along "
             "the flow."
@@ -158,6 +176,15 @@ STRINGS = {
         "kpi_parked": "висят в {parked}",
         "by_label": "По тегам",
         "by_label_desc": (
+            "Доля закрытого — "
+            "в центре каждой "
+            "диаграммы. Сегменты "
+            "идут по порядку "
+            "этапов; цвет называет "
+            "этап, а не ранжирует "
+            "его."
+        ),
+        "by_label_desc_mono": (
             "Доля закрытого — "
             "в центре каждой "
             "диаграммы. Кольцо "
@@ -236,52 +263,66 @@ STRINGS = {
 }
 
 
-def ramp(stages: list[str], parked: str, done: str):
-    """Stage colours for (light, dark), one per stage, assigned by role.
+def _pick(steps, k):
+    """k steps spread evenly over a ramp, ends included."""
+    return [steps[round(i * (len(steps) - 1) / max(k - 1, 1))] for i in range(k)]
 
-    Putting every stage on one blue ramp is what the ordinal rule asks for and
-    it is unreadable here: five single-hue steps land ~ΔE 10 apart (OKLab x100),
-    and an 11px donut arc or a 9px legend swatch is not enough surface to tell
-    ΔE 10 apart — the whole chart reads as one blue smear. Splitting the scale
-    into the three roles a reader is actually asking about buys the contrast
-    back without giving up the order:
 
-        not started  →  warm grey       nothing is happening in this column
-        in flight    →  the blue ramp    still ordinal, now spread over ~3 steps
-        closed       →  muted green      the number the whole report is about
+def ramp(stages: list[str], parked: str, done: str, palette: str = PALETTES[0]):
+    """Stage colours for (light, dark), one per stage.
 
-    Worst adjacent pair goes from ΔE 10 to 16.6 light / 15.6 dark on a palette
-    that is *less* saturated than the one it replaces — the separation comes
-    out of the lightness spread, not out of chroma. The in-flight sub-ramp still
-    passes the ordinal checks in both modes. The pale end of each mode's ramp
-    sits near 2:1 on its surface, which is legal only because every segment is
-    also named in the legend and in the table.
+    Two palettes, because the two readings of a stage scale are both legitimate
+    and the choice belongs to whoever is looking at the board.
 
-    The one pair below the floor is the ring's wrap-around, closed against
-    parked (ΔE 12.9 light): they are the two segments a reader is least likely
-    to confuse, they are the ends of the legend rather than neighbours in it,
-    and the donut draws a gap of card between them.
+    **mono** puts every stage on one blue ordinal ramp. Colour carries the order
+    and nothing else: further along the ramp is further along the flow, and a
+    reader can rank two segments they cannot name. What they cannot do is tell
+    them apart quickly — muted single-hue steps land ΔE 12 apart at five stages
+    (OKLab x100), and an 11px donut arc is not much surface to judge that on.
+
+    **status** gives each stage the colour of the job it is doing, and gets the
+    separation back by spending hue instead of position:
+
+        not started  →  warm grey    nothing is happening in this column
+        in flight    →  blue, amber, red, violet, in that fixed order
+        closed       →  muted green  the number the whole report is about
+
+    Worst adjacent pair, five stages: ΔE 21.5 light / 17.7 dark, against 12 for
+    mono, and it holds up under simulated red-green colour blindness (15.2 /
+    14.8) — which is why the green is lighter than the red rather than merely
+    a different hue from it. What it gives up is the ranking: amber is not
+    "further along" than blue, it is only different, so the order lives in the
+    legend and the stage names rather than in the colour.
+
+    Both palettes are low-chroma; see the ramp definitions for why, and for what
+    the muting costs. Under either, the pale end of a mode's scale sits near
+    2:1 on its surface, which is legal only because every segment is also named
+    in the legend and in the table.
     """
+    n = len(stages)
+    if palette == "mono":
+        return _pick(RAMP_L, n), list(reversed(_pick(RAMP_D, n)))
+
     di = stages.index(done)
     pi = stages.index(parked) if parked in stages else -1
-    neutral = [i for i in range(len(stages)) if i <= pi and i != di]
-    flight = [i for i in range(len(stages)) if i not in neutral and i != di]
-
-    def pick(steps, k):
-        return [steps[round(i * (len(steps) - 1) / max(k - 1, 1))] for i in range(k)]
+    neutral = [i for i in range(n) if i <= pi and i != di]
+    flight = [i for i in range(n) if i not in neutral and i != di]
 
     def outward(steps, k):
         return list(reversed([steps[min(i, len(steps) - 1)] for i in range(k)]))
 
-    light, dark = [None] * len(stages), [None] * len(stages)
+    # More in-flight stages than there are hues that stay apart when muted: fall
+    # back to the ordinal ramp for that group rather than inventing a fifth hue.
+    over = len(flight) > len(FLIGHT_L)
+    light, dark = [None] * n, [None] * n
     for slot, c_l, c_d in (
         (neutral, outward(NEUTRAL_L, len(neutral)), outward(NEUTRAL_D, len(neutral))),
         (
             flight,
-            [FLIGHT_1_L] if len(flight) == 1 else pick(RAMP_L, len(flight)),
-            [FLIGHT_1_D] if len(flight) == 1 else list(reversed(pick(RAMP_D, len(flight)))),
+            _pick(RAMP_L, len(flight)) if over else FLIGHT_L[: len(flight)],
+            list(reversed(_pick(RAMP_D, len(flight)))) if over else FLIGHT_D[: len(flight)],
         ),
-        ([di], [DONE_C], [DONE_C]),
+        ([di], [DONE_L], [DONE_D]),
     ):
         for i, c1, c2 in zip(slot, c_l, c_d, strict=True):
             light[i], dark[i] = c1, c2
@@ -315,6 +356,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-i", "--report", default="report.json")
     p.add_argument("-o", "--out", default="flow.html")
     p.add_argument("--lang", default="en", choices=sorted(STRINGS))
+    p.add_argument(
+        "--palette",
+        default=PALETTES[0],
+        choices=PALETTES,
+        help="stage colours: 'status' gives each stage a hue of its own, "
+        "'mono' puts them all on one blue ordinal ramp",
+    )
     p.add_argument("--title", default=None, help="page <title>: a short noun phrase")
     p.add_argument("--heading", default=None, help="the h1 on the page")
     return p
@@ -335,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
     if not AT:
         sys.exit("The report is empty — nothing matched that window.")
     di = ST.index(DONE)
-    L, DK = ramp(ST, M["parked"], DONE)
+    L, DK = ramp(ST, M["parked"], DONE, a.palette)
     w0, w1 = M["window"]
 
     def fmt(iso):
@@ -463,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
     inflight = sum(A["counts"][ST.index(t)] for t in M["track"] if t in ST and t != DONE)
     tl = "".join(f"--st{i}:{c};" for i, c in enumerate(L))
     td = "".join(f"--st{i}:{c};" for i, c in enumerate(DK))
+    ring_desc = T["by_label_desc_mono" if a.palette == "mono" else "by_label_desc"]
     keylegend = "".join(
         f'<div><span class="sw" style="background:var(--st{i})"></span>{e(s)}</div>'
         for i, s in enumerate(ST)
@@ -596,7 +645,7 @@ a:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
 </section>
 
 <section>
-  <div class="sechead"><h2>{T["by_label"]}</h2><p>{T["by_label_desc"]}</p></div>
+  <div class="sechead"><h2>{T["by_label"]}</h2><p>{ring_desc}</p></div>
   <div class="grid">{cards()}</div>
 </section>
 

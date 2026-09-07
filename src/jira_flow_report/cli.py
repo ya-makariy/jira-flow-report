@@ -11,7 +11,7 @@ from jira_flow_report import buildinfo, config, ui
 
 
 def cmd_init(args) -> int:
-    from jira_flow_report import discover, install
+    from jira_flow_report import discover, install, render
 
     cfg = config.load(required=False)
     assume = args.yes
@@ -108,6 +108,11 @@ def cmd_init(args) -> int:
     lang = args.lang or discover.ask(
         "Report language (en/ru)", cfg.get("lang", "en"), assume=assume
     )
+    palette = args.palette or discover.ask(
+        "Stage colours: status (a hue per stage) or mono (one blue ramp)",
+        cfg.get("palette", render.PALETTES[0]),
+        assume=assume,
+    )
 
     for name, val in (("parked", parked), ("done", done)):
         if val not in stages:
@@ -130,6 +135,7 @@ def cmd_init(args) -> int:
         "track": track,
         "status_aliases": aliases,
         "lang": lang if lang in ("en", "ru") else "en",
+        "palette": palette if palette in render.PALETTES else render.PALETTES[0],
         "stage_meta": stage_meta,
     }
     path = config.save(new)
@@ -299,6 +305,7 @@ def cmd_report(args, rest: list[str]) -> int:
     if rc:
         return rc
     ren = ["-i", args.report, "-o", args.out, "--lang", args.lang or cfg.get("lang", "en")]
+    ren += ["--palette", args.palette or cfg.get("palette", render.PALETTES[0])]
     if args.heading:
         ren += ["--heading", args.heading]
     if args.title:
@@ -336,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         "--labels", help="comma-separated chart categories, skipping the interactive pick"
     )
     i.add_argument("--lang", help="report language (en/ru)")
+    i.add_argument("--palette", help="stage colours: status or mono")
     i.add_argument(
         "-y",
         "--yes",
@@ -427,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--report", default="report.json")
     r.add_argument("-o", "--out", default="flow.html")
     r.add_argument("--lang")
+    r.add_argument("--palette", help="stage colours: status (default) or mono")
     r.add_argument("--title")
     r.add_argument("--heading")
     r.set_defaults(fn=None)

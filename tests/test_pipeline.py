@@ -501,6 +501,20 @@ def test_render_produces_a_themed_page(rendered, lang):
     assert "https://jira.example.com/browse/ABC-1" in h
 
 
+def test_palette_flag_reaches_the_page(rendered):
+    """--palette has to change the CSS custom properties the charts read, and the
+    caption that explains how to read them: under mono the colour ranks the
+    stages, under status it only names them, and saying the wrong one is worse
+    than saying nothing."""
+    status, mono = rendered("--palette", "status"), rendered("--palette", "mono")
+    assert any(f"--st0:{c};" in status for c in render.NEUTRAL_L)
+    assert render.DONE_L in status and render.FLIGHT_L[0] in status
+    assert f"--st0:{render.RAMP_L[0]};" in mono
+    assert render.DONE_L not in mono and render.FLIGHT_L[0] not in mono
+    assert "the further along the scale" in mono
+    assert "the further along the scale" not in status
+
+
 def test_render_escapes_summaries(tmp_path):
     snap = write_snap(
         tmp_path,
@@ -544,29 +558,52 @@ def test_render_empty_report_exits(tmp_path):
         render.main(["-i", str(rep), "-o", str(tmp_path / "f.html")])
 
 
-def test_ramp_covers_every_stage_with_a_distinct_colour():
-    for n in range(2, 9):
-        stages = ["Parked", *(f"S{i}" for i in range(n - 2)), "Done"][:n]
-        light, dark = render.ramp(stages, "Parked", "Done")
-        assert len(light) == len(dark) == n
-        assert len(set(light)) == n, f"duplicate light steps at n={n}"
-        assert len(set(dark)) == n, f"duplicate dark steps at n={n}"
-
-
-def test_ramp_assigns_colour_by_role():
-    """The three roles are the whole point of the palette: a reader has to be able
-    to tell "not started" from "in flight" from "closed" at a glance, which one
-    blue ramp across all five stages did not let them do."""
+def test_status_palette_assigns_colour_by_role():
+    """The three roles are the whole point of the status palette: a reader has to
+    be able to tell "not started" from "in flight" from "closed" at a glance,
+    which one blue ramp across all five stages did not let them do."""
     stages = ["Selected", "In Progress", "In Review", "Testing", "Done"]
     light, dark = render.ramp(stages, "Selected", "Done")
 
-    # Closed wears the reserved status step, and the same one in both modes.
-    assert light[4] == dark[4] == render.DONE_C
-    # Parked wears a neutral, not a step off the blue ramp.
+    assert light[4] == render.DONE_L and dark[4] == render.DONE_D
+    # Parked wears a neutral, not a hue.
     assert light[0] in render.NEUTRAL_L and dark[0] in render.NEUTRAL_D
-    # The stages in between are the blue ramp, and still read in order.
-    assert light[1:4] == [c for c in render.RAMP_L if c in light]
-    assert dark[1:4] == [c for c in reversed(render.RAMP_D) if c in dark]
+    # The stages in between take the in-flight hues, in their fixed order.
+    assert light[1:4] == render.FLIGHT_L[:3]
+    assert dark[1:4] == render.FLIGHT_D[:3]
+
+
+def test_status_palette_falls_back_to_the_ramp_past_the_hue_cap():
+    """There are only four muted hues that stay apart. A board with more
+    in-flight stages than that gets the ordinal ramp for them rather than a
+    fifth hue nobody can distinguish — but keeps the parked and closed roles."""
+    stages = ["Selected", "A", "B", "C", "D", "E", "Done"]
+    light, dark = render.ramp(stages, "Selected", "Done")
+    assert light[0] in render.NEUTRAL_L
+    assert light[6] == render.DONE_L and dark[6] == render.DONE_D
+    assert light[1:6] == [c for c in render.RAMP_L if c in light]
+    assert not set(light) & set(render.FLIGHT_L)
+
+
+def test_mono_palette_is_one_ordinal_ramp_over_every_stage():
+    """--palette mono is the shape this started as: no roles, no hues, colour
+    carrying nothing but the order. Dark reverses it so the closing stage is the
+    lightest step on a dark ground."""
+    stages = ["Selected", "In Progress", "In Review", "Testing", "Done"]
+    light, dark = render.ramp(stages, "Selected", "Done", "mono")
+    assert light == [c for c in render.RAMP_L if c in light]
+    assert dark == [c for c in reversed(render.RAMP_D) if c in dark]
+    assert not {*light, *dark} & {render.DONE_L, render.DONE_D, *render.NEUTRAL_L}
+
+
+@pytest.mark.parametrize("palette", render.PALETTES)
+def test_every_palette_covers_every_stage_distinctly(palette):
+    for n in range(2, 9):
+        stages = ["Parked", *(f"S{i}" for i in range(n - 2)), "Done"][:n]
+        light, dark = render.ramp(stages, "Parked", "Done", palette)
+        assert len(light) == len(dark) == n
+        assert len(set(light)) == n, f"duplicate light steps, {palette} n={n}"
+        assert len(set(dark)) == n, f"duplicate dark steps, {palette} n={n}"
 
 
 def test_ramp_puts_stages_off_the_scale_ahead_of_the_parked_column():
@@ -585,7 +622,7 @@ def test_ramp_survives_a_parked_column_that_is_not_on_the_scale():
     stages = ["A", "B", "Done"]
     light, dark = render.ramp(stages, "not-a-stage", "Done")
     assert all(light) and all(dark)
-    assert light[2] == render.DONE_C
+    assert light[2] == render.DONE_L
 
 
 def test_case_variant_labels_do_not_split_a_category(tmp_path):

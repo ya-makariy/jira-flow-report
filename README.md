@@ -231,6 +231,7 @@ should you when you present it.
 | `--labels` | from config | chart categories, in display order |
 | `--no-fold-case` | off | treat `devops` and `devOps` as different labels |
 | `--lang` | from config | `en` or `ru` |
+| `--palette` | from config | `status` or `mono` — see **Colour** |
 
 `--restrict` applies **per label**. An issue tagged both `backend` and `devops`
 that fails the `devops` restriction still counts in `backend` — a filter on one
@@ -304,37 +305,45 @@ is the whole reason they are dependency-free.
 
 ## Colour
 
-Stages are an **ordered** scale, so colour has to carry the order — but putting
-all five on one blue ramp made the charts unreadable: single-hue steps land about
-ΔE 10 apart (OKLab ×100), and an 11px donut arc is not enough surface to tell ΔE
-10 apart. Every ring came out one blue smear.
+Two palettes, `--palette status` (default) and `--palette mono`. Set a default in
+the config with `palette = "status"`; `init` asks for it.
 
-So each stage is coloured by the role it plays, and only the middle group is a
-ramp:
+**`mono`** puts every stage on one blue ordinal ramp. Colour carries the order and
+nothing else: further along the ramp is further along the flow, so a reader can
+rank two segments without knowing their names. What they cannot do is tell them
+apart quickly — muted single-hue steps land about ΔE 12 apart at five stages
+(OKLab ×100), and an 11px donut arc is not much surface to judge that on.
+
+**`status`** gives each stage the colour of the job it is doing, and buys the
+separation back with hue instead of position:
 
 | role | stages | colour |
 |---|---|---|
 | not started | the parked column, and any status prepended ahead of it | warm grey |
-| in flight | everything between | the blue ordinal ramp, spread over its full range |
-| closed | `--done` | a muted green, the same one in both modes |
+| in flight | everything between | blue, amber, red, violet, in that fixed order |
+| closed | `--done` | muted green |
 
-The set is deliberately low-chroma — the page is warm neutral paper and a
-saturated ramp fought it. The blues run OKLCH C 0.05–0.07 and the green sits at
-0.10, against 0.10–0.16 and 0.21 for the same roles in a stock chart palette.
-Separation comes out of the **lightness** spread instead, which is why the steps
-are pushed as far apart as each surface allows: worst adjacent pair is ΔE 16.6
-light / 15.6 dark, against ΔE 10 for the single blue ramp that was here before.
-Less colour, more contrast.
+Worst adjacent pair at five stages is ΔE 21.5 light / 17.7 dark against 12 for
+`mono`, and it survives simulated red-green colour blindness (15.2 / 14.8) —
+which is why the green is *lighter* than the red rather than merely a different
+hue from it. What it gives up is the ranking: amber is not "further along" than
+blue, only different, so the order lives in the legend and the stage names. The
+page says which of the two it is doing, in the caption above the rings.
 
-The in-flight ramp still passes the ordinal checks in both modes — monotone
-lightness, visible step gaps, the step nearest the surface clearing 2:1 — so the
-order is still in the colour; there is just less of the scale for it to cover.
-The pale end sitting near 2:1 is legal only because every segment is also named,
-in the legend and in the table.
+Four in-flight hues is a cap, not a stopping point. Both palettes are deliberately
+low-chroma — the page is warm neutral paper and a saturated ramp fought it — and
+muting costs chroma, which is most of the distance between two hues. A fifth and
+sixth muted hue cannot be added without some pair dropping below where full-colour
+readers separate them. A board with more in-flight stages than four gets the
+ordinal ramp for them; grey and green keep their roles.
 
-Values are OKLCH-generated. If you retune, do it in that space — nudging a hex
-by eye will quietly break the step spacing. Other stage counts fall back to even
-spacing over the same ramps; if you change `--stages`, revalidate.
+Under either palette the pale end of a mode's scale sits near 2:1 on its surface.
+That is legal only because every segment is also named, in the legend and in the
+table.
+
+Values are OKLCH-generated. If you retune, do it in that space — nudging a hex by
+eye will quietly break the spacing without breaking anything that fails loudly.
+If you change `--stages`, revalidate.
 
 ## Privacy
 
