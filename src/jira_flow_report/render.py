@@ -15,48 +15,61 @@ import json
 import math
 import sys
 
+# The palette is muted on purpose: the page it sits on is warm neutral paper,
+# and a saturated ramp fought it. Everything here is low-chroma — the blues run
+# OKLCH C 0.05-0.07 and the green sits at 0.10, against 0.10-0.16 and 0.21 for
+# the same roles in a stock chart palette. Separation is bought with lightness
+# instead, which is why the steps are spread as wide as each surface allows
+# rather than clustered. Values are OKLCH-generated, so keep them in that space
+# if you retune: nudging a hex by eye will quietly break the step spacing.
 RAMP_L = [
-    "#86b6ef",
-    "#6da7ec",
-    "#5598e7",
-    "#3987e5",
-    "#2a78d6",
-    "#256abf",
-    "#1c5cab",
-    "#184f95",
-    "#104281",
-    "#0d366b",
+    "#9eb7d4",
+    "#8daaca",
+    "#7d9cc0",
+    "#6d8fb5",
+    "#6082a9",
+    "#53759c",
+    "#48698d",
+    "#3f5c7d",
+    "#36506d",
+    "#2e445c",
 ]
-# Starts one step in from the sequential ramp's pale end: on the dark surface
-# step 100 stops reading as a blue mark and starts reading as white text.
+# Not the light ramp reused: the dark end has to stay off the dark surface, so
+# the whole run is lifted and the pale end stops short of reading as white text.
 RAMP_D = [
-    "#b7d3f6",
-    "#9ec5f4",
-    "#86b6ef",
-    "#6da7ec",
-    "#5598e7",
-    "#3987e5",
-    "#2a78d6",
-    "#256abf",
-    "#1c5cab",
-    "#184f95",
+    "#a1bad7",
+    "#91aecf",
+    "#82a2c6",
+    "#7496bd",
+    "#688bb2",
+    "#5c7fa6",
+    "#537398",
+    "#4a6889",
+    "#435d7a",
+    "#3c526b",
 ]
-# Grey sub-scale for the stages nothing has moved out of yet: the parked column,
-# plus any status prepended to the scale ahead of it. Written outward from the
-# anchor rather than end to end, because the common case is a single neutral
-# stage and it has to land on the legible middle grey, not on a ramp endpoint.
-# Earlier stages step away from the anchor toward the surface. A board with more
-# than three statuses stacked ahead of its parked column reuses the last step —
-# there is no fourth grey on this surface that is still a visible mark.
-NEUTRAL_L = ["#898781", "#c3c2b7", "#e1e0d9"]
-NEUTRAL_D = ["#898781", "#52514e", "#383835"]
+# Warm greys for the stages nothing has moved out of yet: the parked column,
+# plus any status prepended to the scale ahead of it. Warm rather than dead
+# neutral so they belong to the same page as the paper and the body ink, and so
+# they separate from the cool blues by hue as well as by lightness.
+#
+# Written outward from the anchor rather than end to end, because the common
+# case is a single neutral stage and it has to land on the legible middle grey,
+# not on a ramp endpoint. Earlier stages step away from the anchor toward the
+# surface. A board with more than three statuses stacked ahead of its parked
+# column reuses the last step — there is no fourth grey on this surface that is
+# still a visible mark.
+NEUTRAL_L = ["#8e8578", "#aba398", "#c8c1b9"]
+NEUTRAL_D = ["#a79d90", "#7e7364", "#5c5040"]
 
 # A board with a single in-flight stage has no ramp to walk, so it takes the
-# palette's anchor blue rather than whichever end of the ramp comes first.
-FLIGHT_1_L, FLIGHT_1_D = "#2a78d6", "#3987e5"
+# middle of the ramp rather than whichever end comes first.
+FLIGHT_1_L, FLIGHT_1_D = "#56779d", "#6789b0"
 
-# The reserved "good" status step, mode-invariant by design.
-DONE_C = "#0ca30c"
+# Closed. A muted forest green, and the same one in both modes: it clears 4.8:1
+# on the light surface and 3.5:1 on the dark, so there is nothing to gain by
+# splitting it, and one green is one less thing to keep in step.
+DONE_C = "#3d7d4d"
 
 STRINGS = {
     "en": {
@@ -233,14 +246,21 @@ def ramp(stages: list[str], parked: str, done: str):
     into the three roles a reader is actually asking about buys the contrast
     back without giving up the order:
 
-        not started  →  neutral grey     nothing is happening in this column
+        not started  →  warm grey       nothing is happening in this column
         in flight    →  the blue ramp    still ordinal, now spread over ~3 steps
-        closed       →  status "good"    the number the whole report is about
+        closed       →  muted green      the number the whole report is about
 
-    Worst adjacent pair goes from ΔE 10 to 17.6 light / 20.3 dark, and the
-    in-flight sub-ramp still passes the ordinal checks in both modes. The pale
-    end of each mode's ramp sits near 2:1 on its surface, which is legal only
-    because every segment is also named in the legend and in the table.
+    Worst adjacent pair goes from ΔE 10 to 16.6 light / 15.6 dark on a palette
+    that is *less* saturated than the one it replaces — the separation comes
+    out of the lightness spread, not out of chroma. The in-flight sub-ramp still
+    passes the ordinal checks in both modes. The pale end of each mode's ramp
+    sits near 2:1 on its surface, which is legal only because every segment is
+    also named in the legend and in the table.
+
+    The one pair below the floor is the ring's wrap-around, closed against
+    parked (ΔE 12.9 light): they are the two segments a reader is least likely
+    to confuse, they are the ends of the legend rather than neighbours in it,
+    and the donut draws a gap of card between them.
     """
     di = stages.index(done)
     pi = stages.index(parked) if parked in stages else -1
@@ -455,19 +475,19 @@ def main(argv: list[str] | None = None) -> int:
 <style>
 :root {{
   --plane:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
-  --line:#e1e0d9; --ring:rgba(11,11,11,.10); --accent:#1c5cab; --chipbg:rgba(28,92,171,.09);
+  --line:#e1e0d9; --ring:rgba(11,11,11,.10); --accent:#48698d; --chipbg:rgba(72,105,141,.10);
   {tl} color-scheme:light;
 }}
 @media (prefers-color-scheme:dark) {{
   :root:not([data-theme="light"]) {{
     --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
-    --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#86b6ef; --chipbg:rgba(134,182,239,.13);
+    --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#82a2c6; --chipbg:rgba(130,162,198,.14);
     {td} color-scheme:dark;
   }}
 }}
 :root[data-theme="dark"] {{
   --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
-  --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#86b6ef; --chipbg:rgba(134,182,239,.13);
+  --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#82a2c6; --chipbg:rgba(130,162,198,.14);
   {td} color-scheme:dark;
 }}
 *{{box-sizing:border-box}}

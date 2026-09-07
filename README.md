@@ -314,19 +314,27 @@ ramp:
 
 | role | stages | colour |
 |---|---|---|
-| not started | the parked column, and any status prepended ahead of it | neutral grey |
+| not started | the parked column, and any status prepended ahead of it | warm grey |
 | in flight | everything between | the blue ordinal ramp, spread over its full range |
-| closed | `--done` | the reserved "good" status green, the same in both modes |
+| closed | `--done` | a muted green, the same one in both modes |
 
-Worst adjacent pair goes from ΔE 10 to **17.6 light / 20.3 dark**. The in-flight
-ramp still passes the ordinal checks in both modes — monotone lightness, visible
-step gaps, the step nearest the surface clearing 2:1 — so the order is still in
-the colour; there is just less of the scale for it to cover. The pale end sitting
-near 2:1 is legal only because every segment is also named, in the legend and in
-the table.
+The set is deliberately low-chroma — the page is warm neutral paper and a
+saturated ramp fought it. The blues run OKLCH C 0.05–0.07 and the green sits at
+0.10, against 0.10–0.16 and 0.21 for the same roles in a stock chart palette.
+Separation comes out of the **lightness** spread instead, which is why the steps
+are pushed as far apart as each surface allows: worst adjacent pair is ΔE 16.6
+light / 15.6 dark, against ΔE 10 for the single blue ramp that was here before.
+Less colour, more contrast.
 
-Other stage counts fall back to even spacing over the same ramps. If you change
-`--stages`, revalidate.
+The in-flight ramp still passes the ordinal checks in both modes — monotone
+lightness, visible step gaps, the step nearest the surface clearing 2:1 — so the
+order is still in the colour; there is just less of the scale for it to cover.
+The pale end sitting near 2:1 is legal only because every segment is also named,
+in the legend and in the table.
+
+Values are OKLCH-generated. If you retune, do it in that space — nudging a hex
+by eye will quietly break the step spacing. Other stage counts fall back to even
+spacing over the same ramps; if you change `--stages`, revalidate.
 
 ## Privacy
 
