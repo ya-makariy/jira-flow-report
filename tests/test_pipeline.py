@@ -544,11 +544,48 @@ def test_render_empty_report_exits(tmp_path):
         render.main(["-i", str(rep), "-o", str(tmp_path / "f.html")])
 
 
-def test_ramp_lengths_match_stage_count():
+def test_ramp_covers_every_stage_with_a_distinct_colour():
     for n in range(2, 9):
-        light, dark = render.ramp(n)
+        stages = ["Parked", *(f"S{i}" for i in range(n - 2)), "Done"][:n]
+        light, dark = render.ramp(stages, "Parked", "Done")
         assert len(light) == len(dark) == n
         assert len(set(light)) == n, f"duplicate light steps at n={n}"
+        assert len(set(dark)) == n, f"duplicate dark steps at n={n}"
+
+
+def test_ramp_assigns_colour_by_role():
+    """The three roles are the whole point of the palette: a reader has to be able
+    to tell "not started" from "in flight" from "closed" at a glance, which one
+    blue ramp across all five stages did not let them do."""
+    stages = ["Selected", "In Progress", "In Review", "Testing", "Done"]
+    light, dark = render.ramp(stages, "Selected", "Done")
+
+    # Closed wears the reserved status step, and the same one in both modes.
+    assert light[4] == dark[4] == render.DONE_C
+    # Parked wears a neutral, not a step off the blue ramp.
+    assert light[0] in render.NEUTRAL_L and dark[0] in render.NEUTRAL_D
+    # The stages in between are the blue ramp, and still read in order.
+    assert light[1:4] == [c for c in render.RAMP_L if c in light]
+    assert dark[1:4] == [c for c in reversed(render.RAMP_D) if c in dark]
+
+
+def test_ramp_puts_stages_off_the_scale_ahead_of_the_parked_column():
+    """Statuses aggregate prepends (an issue that fell back to the backlog) are
+    not in flight either — they take neutrals too, or the ramp would run
+    backwards over the first two stages."""
+    stages = ["Backlog", "Selected", "In Progress", "Done"]
+    light, _ = render.ramp(stages, "Selected", "Done")
+    assert light[0] in render.NEUTRAL_L and light[1] in render.NEUTRAL_L
+    assert light[0] != light[1]
+
+
+def test_ramp_survives_a_parked_column_that_is_not_on_the_scale():
+    """--parked is never validated against --stages, so it can name a status that
+    is not on the scale. Every stage still has to come back with a colour."""
+    stages = ["A", "B", "Done"]
+    light, dark = render.ramp(stages, "not-a-stage", "Done")
+    assert all(light) and all(dark)
+    assert light[2] == render.DONE_C
 
 
 def test_case_variant_labels_do_not_split_a_category(tmp_path):

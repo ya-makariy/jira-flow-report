@@ -304,13 +304,28 @@ is the whole reason they are dependency-free.
 
 ## Colour
 
-Stages are an **ordered** scale, so the charts use an ordinal single-hue ramp, not
-categorical hues — the further along the scale, the further along the flow. The
-5-stage default is validated in both light and dark: monotone lightness, visible
-step gaps, and the step nearest the surface still clearing 2:1 contrast. Dark mode
-reverses the ramp so the closing stage is the lightest step on a dark ground.
+Stages are an **ordered** scale, so colour has to carry the order — but putting
+all five on one blue ramp made the charts unreadable: single-hue steps land about
+ΔE 10 apart (OKLab ×100), and an 11px donut arc is not enough surface to tell ΔE
+10 apart. Every ring came out one blue smear.
 
-Other stage counts fall back to even spacing over the same ramp. If you change
+So each stage is coloured by the role it plays, and only the middle group is a
+ramp:
+
+| role | stages | colour |
+|---|---|---|
+| not started | the parked column, and any status prepended ahead of it | neutral grey |
+| in flight | everything between | the blue ordinal ramp, spread over its full range |
+| closed | `--done` | the reserved "good" status green, the same in both modes |
+
+Worst adjacent pair goes from ΔE 10 to **17.6 light / 20.3 dark**. The in-flight
+ramp still passes the ordinal checks in both modes — monotone lightness, visible
+step gaps, the step nearest the surface clearing 2:1 — so the order is still in
+the colour; there is just less of the scale for it to cover. The pale end sitting
+near 2:1 is legal only because every segment is also named, in the legend and in
+the table.
+
+Other stage counts fall back to even spacing over the same ramps. If you change
 `--stages`, revalidate.
 
 ## Privacy

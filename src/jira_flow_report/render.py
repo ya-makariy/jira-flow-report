@@ -3,12 +3,8 @@
 
 Standalone by design: stdlib only, no imports from this package, no network.
 
-Colour: workflow stages are an ORDERED scale, so this uses an ordinal
-single-hue ramp rather than categorical hues. The 5-stage default is validated
-in both light and dark modes (monotone lightness, visible step gaps, the step
-nearest the surface still clearing 2:1); dark mode reverses the ramp so the
-closing stage is the lightest step on a dark ground. Other stage counts fall
-back to even spacing over the same ramp — revalidate if you change --stages.
+Colour: see ramp() — stages are coloured by the role they play (not started /
+in flight / closed), not by position on one ramp alone.
 """
 
 from __future__ import annotations
@@ -31,8 +27,9 @@ RAMP_L = [
     "#104281",
     "#0d366b",
 ]
+# Starts one step in from the sequential ramp's pale end: on the dark surface
+# step 100 stops reading as a blue mark and starts reading as white text.
 RAMP_D = [
-    "#cde2fb",
     "#b7d3f6",
     "#9ec5f4",
     "#86b6ef",
@@ -44,8 +41,22 @@ RAMP_D = [
     "#1c5cab",
     "#184f95",
 ]
-VALIDATED_L = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]
-VALIDATED_D = ["#184f95", "#256abf", "#3987e5", "#86b6ef", "#b7d3f6"]
+# Grey sub-scale for the stages nothing has moved out of yet: the parked column,
+# plus any status prepended to the scale ahead of it. Written outward from the
+# anchor rather than end to end, because the common case is a single neutral
+# stage and it has to land on the legible middle grey, not on a ramp endpoint.
+# Earlier stages step away from the anchor toward the surface. A board with more
+# than three statuses stacked ahead of its parked column reuses the last step —
+# there is no fourth grey on this surface that is still a visible mark.
+NEUTRAL_L = ["#898781", "#c3c2b7", "#e1e0d9"]
+NEUTRAL_D = ["#898781", "#52514e", "#383835"]
+
+# A board with a single in-flight stage has no ramp to walk, so it takes the
+# palette's anchor blue rather than whichever end of the ramp comes first.
+FLIGHT_1_L, FLIGHT_1_D = "#2a78d6", "#3987e5"
+
+# The reserved "good" status step, mode-invariant by design.
+DONE_C = "#0ca30c"
 
 STRINGS = {
     "en": {
@@ -212,14 +223,49 @@ STRINGS = {
 }
 
 
-def ramp(n: int):
-    if n == 5:
-        return VALIDATED_L, VALIDATED_D
+def ramp(stages: list[str], parked: str, done: str):
+    """Stage colours for (light, dark), one per stage, assigned by role.
 
-    def pick(steps):
-        return [steps[round(i * (len(steps) - 1) / max(n - 1, 1))] for i in range(n)]
+    Putting every stage on one blue ramp is what the ordinal rule asks for and
+    it is unreadable here: five single-hue steps land ~ΔE 10 apart (OKLab x100),
+    and an 11px donut arc or a 9px legend swatch is not enough surface to tell
+    ΔE 10 apart — the whole chart reads as one blue smear. Splitting the scale
+    into the three roles a reader is actually asking about buys the contrast
+    back without giving up the order:
 
-    return pick(RAMP_L), list(reversed(pick(RAMP_D)))
+        not started  →  neutral grey     nothing is happening in this column
+        in flight    →  the blue ramp    still ordinal, now spread over ~3 steps
+        closed       →  status "good"    the number the whole report is about
+
+    Worst adjacent pair goes from ΔE 10 to 17.6 light / 20.3 dark, and the
+    in-flight sub-ramp still passes the ordinal checks in both modes. The pale
+    end of each mode's ramp sits near 2:1 on its surface, which is legal only
+    because every segment is also named in the legend and in the table.
+    """
+    di = stages.index(done)
+    pi = stages.index(parked) if parked in stages else -1
+    neutral = [i for i in range(len(stages)) if i <= pi and i != di]
+    flight = [i for i in range(len(stages)) if i not in neutral and i != di]
+
+    def pick(steps, k):
+        return [steps[round(i * (len(steps) - 1) / max(k - 1, 1))] for i in range(k)]
+
+    def outward(steps, k):
+        return list(reversed([steps[min(i, len(steps) - 1)] for i in range(k)]))
+
+    light, dark = [None] * len(stages), [None] * len(stages)
+    for slot, c_l, c_d in (
+        (neutral, outward(NEUTRAL_L, len(neutral)), outward(NEUTRAL_D, len(neutral))),
+        (
+            flight,
+            [FLIGHT_1_L] if len(flight) == 1 else pick(RAMP_L, len(flight)),
+            [FLIGHT_1_D] if len(flight) == 1 else list(reversed(pick(RAMP_D, len(flight)))),
+        ),
+        ([di], [DONE_C], [DONE_C]),
+    ):
+        for i, c1, c2 in zip(slot, c_l, c_d, strict=True):
+            light[i], dark[i] = c1, c2
+    return light, dark
 
 
 def donut(counts, total, size=196):
@@ -269,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
     if not AT:
         sys.exit("The report is empty — nothing matched that window.")
     di = ST.index(DONE)
-    L, DK = ramp(len(ST))
+    L, DK = ramp(ST, M["parked"], DONE)
     w0, w1 = M["window"]
 
     def fmt(iso):
@@ -442,7 +488,7 @@ h2{{font:600 19px/1.3 "IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.01em}
 .kpi b{{font:600 34px/1 "IBM Plex Sans",sans-serif;letter-spacing:-.03em}}
 .kpi span{{font:500 11px/1.3 "IBM Plex Mono",monospace;letter-spacing:.09em;
   text-transform:uppercase;color:var(--muted)}}
-.kpi.hero b{{color:var(--accent)}}
+.kpi.hero b{{color:var(--st{di})}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:16px}}
 .card{{background:var(--surface);border:1px solid var(--ring);border-radius:4px;padding:20px;
   display:flex;flex-direction:column;gap:14px}}
