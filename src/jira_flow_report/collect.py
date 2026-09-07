@@ -128,7 +128,7 @@ def run(args) -> int:
             }
         )
 
-    with open(args.out, "w") as fh:
+    with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, indent=1)
     print(f"{len(out['issues'])} issues -> {args.out}", file=sys.stderr)
     return 0
