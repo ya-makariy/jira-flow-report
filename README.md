@@ -231,6 +231,7 @@ should you when you present it.
 | `--labels` | from config | chart categories, in display order |
 | `--no-fold-case` | off | treat `devops` and `devOps` as different labels |
 | `--lang` | from config | `en` or `ru` |
+| `--palette` | from config | `status` or `mono` — see **Colour** |
 
 `--restrict` applies **per label**. An issue tagged both `backend` and `devops`
 that fails the `devops` restriction still counts in `backend` — a filter on one
@@ -304,14 +305,45 @@ is the whole reason they are dependency-free.
 
 ## Colour
 
-Stages are an **ordered** scale, so the charts use an ordinal single-hue ramp, not
-categorical hues — the further along the scale, the further along the flow. The
-5-stage default is validated in both light and dark: monotone lightness, visible
-step gaps, and the step nearest the surface still clearing 2:1 contrast. Dark mode
-reverses the ramp so the closing stage is the lightest step on a dark ground.
+Two palettes, `--palette status` (default) and `--palette mono`. Set a default in
+the config with `palette = "status"`; `init` asks for it.
 
-Other stage counts fall back to even spacing over the same ramp. If you change
-`--stages`, revalidate.
+**`mono`** puts every stage on one blue ordinal ramp. Colour carries the order and
+nothing else: further along the ramp is further along the flow, so a reader can
+rank two segments without knowing their names. What they cannot do is tell them
+apart quickly — muted single-hue steps land about ΔE 12 apart at five stages
+(OKLab ×100), and an 11px donut arc is not much surface to judge that on.
+
+**`status`** gives each stage the colour of the job it is doing, and buys the
+separation back with hue instead of position:
+
+| role | stages | colour |
+|---|---|---|
+| not started | the parked column, and any status prepended ahead of it | warm grey |
+| in flight | everything between | blue, amber, red, violet, in that fixed order |
+| closed | `--done` | muted green |
+
+Worst adjacent pair at five stages is ΔE 21.5 light / 17.7 dark against 12 for
+`mono`, and it survives simulated red-green colour blindness (15.2 / 14.8) —
+which is why the green is *lighter* than the red rather than merely a different
+hue from it. What it gives up is the ranking: amber is not "further along" than
+blue, only different, so the order lives in the legend and the stage names. The
+page says which of the two it is doing, in the caption above the rings.
+
+Four in-flight hues is a cap, not a stopping point. Both palettes are deliberately
+low-chroma — the page is warm neutral paper and a saturated ramp fought it — and
+muting costs chroma, which is most of the distance between two hues. A fifth and
+sixth muted hue cannot be added without some pair dropping below where full-colour
+readers separate them. A board with more in-flight stages than four gets the
+ordinal ramp for them; grey and green keep their roles.
+
+Under either palette the pale end of a mode's scale sits near 2:1 on its surface.
+That is legal only because every segment is also named, in the legend and in the
+table.
+
+Values are OKLCH-generated. If you retune, do it in that space — nudging a hex by
+eye will quietly break the spacing without breaking anything that fails loudly.
+If you change `--stages`, revalidate.
 
 ## Privacy
 

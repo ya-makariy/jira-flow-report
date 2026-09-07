@@ -44,6 +44,7 @@ none, ask — do not silently default to "the last two weeks".
 | `--stages` / `--track` / `--done` | from the snapshot | the stage scale, which transitions select, which stage counts as closed |
 | `--labels` | `${labels}` | chart categories, in display order |
 | `--lang` (render) | `${lang}` | page language |
+| `--palette` (render) | `${palette}` | `status` gives each stage a hue of its own; `mono` puts them all on one blue ordinal ramp |
 
 The `--parked-cutoff` default is a guess, not a rule. **Always state the resolved
 value back to the user** — it silently changes the "stuck" count. A grooming

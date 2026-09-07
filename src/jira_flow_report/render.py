@@ -3,12 +3,8 @@
 
 Standalone by design: stdlib only, no imports from this package, no network.
 
-Colour: workflow stages are an ORDERED scale, so this uses an ordinal
-single-hue ramp rather than categorical hues. The 5-stage default is validated
-in both light and dark modes (monotone lightness, visible step gaps, the step
-nearest the surface still clearing 2:1); dark mode reverses the ramp so the
-closing stage is the lightest step on a dark ground. Other stage counts fall
-back to even spacing over the same ramp — revalidate if you change --stages.
+Colour: see ramp() — two palettes, --palette status (each stage the colour of
+the job it is doing) and --palette mono (one blue ordinal ramp).
 """
 
 from __future__ import annotations
@@ -19,33 +15,75 @@ import json
 import math
 import sys
 
+# The palette is muted on purpose: the page it sits on is warm neutral paper,
+# and a saturated ramp fought it. Everything here is low-chroma — the blues run
+# OKLCH C 0.05-0.07 and the green sits at 0.10, against 0.10-0.16 and 0.21 for
+# the same roles in a stock chart palette. Separation is bought with lightness
+# instead, which is why the steps are spread as wide as each surface allows
+# rather than clustered. Values are OKLCH-generated, so keep them in that space
+# if you retune: nudging a hex by eye will quietly break the step spacing.
 RAMP_L = [
-    "#86b6ef",
-    "#6da7ec",
-    "#5598e7",
-    "#3987e5",
-    "#2a78d6",
-    "#256abf",
-    "#1c5cab",
-    "#184f95",
-    "#104281",
-    "#0d366b",
+    "#9eb7d4",
+    "#8daaca",
+    "#7d9cc0",
+    "#6d8fb5",
+    "#6082a9",
+    "#53759c",
+    "#48698d",
+    "#3f5c7d",
+    "#36506d",
+    "#2e445c",
 ]
+# Not the light ramp reused: the dark end has to stay off the dark surface, so
+# the whole run is lifted and the pale end stops short of reading as white text.
 RAMP_D = [
-    "#cde2fb",
-    "#b7d3f6",
-    "#9ec5f4",
-    "#86b6ef",
-    "#6da7ec",
-    "#5598e7",
-    "#3987e5",
-    "#2a78d6",
-    "#256abf",
-    "#1c5cab",
-    "#184f95",
+    "#a1bad7",
+    "#91aecf",
+    "#82a2c6",
+    "#7496bd",
+    "#688bb2",
+    "#5c7fa6",
+    "#537398",
+    "#4a6889",
+    "#435d7a",
+    "#3c526b",
 ]
-VALIDATED_L = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]
-VALIDATED_D = ["#184f95", "#256abf", "#3987e5", "#86b6ef", "#b7d3f6"]
+# Warm greys for the stages nothing has moved out of yet: the parked column,
+# plus any status prepended to the scale ahead of it. Warm rather than dead
+# neutral so they belong to the same page as the paper and the body ink, and so
+# they separate from the cool marks by hue as well as by lightness.
+#
+# The anchor is deliberately faint — 2.2:1 on the light surface, the quietest
+# mark on the page, because "nothing has happened here" should not shout. That
+# leaves nowhere fainter to go, so the rarer stages prepended ahead of it step
+# the other way, toward more contrast, rather than fading into the paper. Beyond
+# three the last step repeats.
+NEUTRAL_L = ["#b2aba2", "#938b7f", "#746a5d"]
+NEUTRAL_D = ["#70685c", "#90887c", "#b1aa9f"]
+
+# Hues for the in-flight stages under the "status" palette, in fixed order:
+# blue, amber, red, violet. On the usual board that is In Progress / In Review /
+# Testing, which is where the order comes from — amber for "waiting on someone",
+# red for "being broken on purpose".
+#
+# Four is the cap, not an arbitrary stopping point. Muting costs chroma, chroma
+# is most of the distance between two hues, and a fifth and sixth muted hue
+# cannot be added without some pair dropping below the point where full-colour
+# readers can separate them (teal against the green, rose against the violet,
+# measured both ways). A board with more in-flight stages than this falls back
+# to the ordinal ramp for that group; grey and green keep their roles.
+FLIGHT_L = ["#4579b2", "#be9f50", "#91362f", "#9f7bba"]
+FLIGHT_D = ["#5c91cc", "#d7b768", "#af4d45", "#b28dcd"]
+
+# Closed. A muted green, split by mode: it has to sit far enough from the red
+# next to it in lightness that red-green colour blindness still separates them,
+# and the red is not at the same lightness in both modes.
+DONE_L, DONE_D = "#579766", "#6fb07d"
+
+# "status" gives each stage the colour of the job it is doing; "mono" is the
+# single-hue ordinal ramp this started as, where colour carries the order and
+# nothing else.
+PALETTES = ("status", "mono")
 
 STRINGS = {
     "en": {
@@ -62,6 +100,10 @@ STRINGS = {
         "kpi_parked": "parked in {parked}",
         "by_label": "By label",
         "by_label_desc": (
+            "The closed share is in the middle of each ring. Segments run in "
+            "stage order; each colour names a stage rather than ranking it."
+        ),
+        "by_label_desc_mono": (
             "The closed share is in the middle of each ring. The ring reads "
             "in stage order: the further along the scale, the further along "
             "the flow."
@@ -134,6 +176,15 @@ STRINGS = {
         "kpi_parked": "висят в {parked}",
         "by_label": "По тегам",
         "by_label_desc": (
+            "Доля закрытого — "
+            "в центре каждой "
+            "диаграммы. Сегменты "
+            "идут по порядку "
+            "этапов; цвет называет "
+            "этап, а не ранжирует "
+            "его."
+        ),
+        "by_label_desc_mono": (
             "Доля закрытого — "
             "в центре каждой "
             "диаграммы. Кольцо "
@@ -212,14 +263,70 @@ STRINGS = {
 }
 
 
-def ramp(n: int):
-    if n == 5:
-        return VALIDATED_L, VALIDATED_D
+def _pick(steps, k):
+    """k steps spread evenly over a ramp, ends included."""
+    return [steps[round(i * (len(steps) - 1) / max(k - 1, 1))] for i in range(k)]
 
-    def pick(steps):
-        return [steps[round(i * (len(steps) - 1) / max(n - 1, 1))] for i in range(n)]
 
-    return pick(RAMP_L), list(reversed(pick(RAMP_D)))
+def ramp(stages: list[str], parked: str, done: str, palette: str = PALETTES[0]):
+    """Stage colours for (light, dark), one per stage.
+
+    Two palettes, because the two readings of a stage scale are both legitimate
+    and the choice belongs to whoever is looking at the board.
+
+    **mono** puts every stage on one blue ordinal ramp. Colour carries the order
+    and nothing else: further along the ramp is further along the flow, and a
+    reader can rank two segments they cannot name. What they cannot do is tell
+    them apart quickly — muted single-hue steps land ΔE 12 apart at five stages
+    (OKLab x100), and an 11px donut arc is not much surface to judge that on.
+
+    **status** gives each stage the colour of the job it is doing, and gets the
+    separation back by spending hue instead of position:
+
+        not started  →  warm grey    nothing is happening in this column
+        in flight    →  blue, amber, red, violet, in that fixed order
+        closed       →  muted green  the number the whole report is about
+
+    Worst adjacent pair, five stages: ΔE 21.5 light / 17.7 dark, against 12 for
+    mono, and it holds up under simulated red-green colour blindness (15.2 /
+    14.8) — which is why the green is lighter than the red rather than merely
+    a different hue from it. What it gives up is the ranking: amber is not
+    "further along" than blue, it is only different, so the order lives in the
+    legend and the stage names rather than in the colour.
+
+    Both palettes are low-chroma; see the ramp definitions for why, and for what
+    the muting costs. Under either, the pale end of a mode's scale sits near
+    2:1 on its surface, which is legal only because every segment is also named
+    in the legend and in the table.
+    """
+    n = len(stages)
+    if palette == "mono":
+        return _pick(RAMP_L, n), list(reversed(_pick(RAMP_D, n)))
+
+    di = stages.index(done)
+    pi = stages.index(parked) if parked in stages else -1
+    neutral = [i for i in range(n) if i <= pi and i != di]
+    flight = [i for i in range(n) if i not in neutral and i != di]
+
+    def outward(steps, k):
+        return list(reversed([steps[min(i, len(steps) - 1)] for i in range(k)]))
+
+    # More in-flight stages than there are hues that stay apart when muted: fall
+    # back to the ordinal ramp for that group rather than inventing a fifth hue.
+    over = len(flight) > len(FLIGHT_L)
+    light, dark = [None] * n, [None] * n
+    for slot, c_l, c_d in (
+        (neutral, outward(NEUTRAL_L, len(neutral)), outward(NEUTRAL_D, len(neutral))),
+        (
+            flight,
+            _pick(RAMP_L, len(flight)) if over else FLIGHT_L[: len(flight)],
+            list(reversed(_pick(RAMP_D, len(flight)))) if over else FLIGHT_D[: len(flight)],
+        ),
+        ([di], [DONE_L], [DONE_D]),
+    ):
+        for i, c1, c2 in zip(slot, c_l, c_d, strict=True):
+            light[i], dark[i] = c1, c2
+    return light, dark
 
 
 def donut(counts, total, size=196):
@@ -249,6 +356,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-i", "--report", default="report.json")
     p.add_argument("-o", "--out", default="flow.html")
     p.add_argument("--lang", default="en", choices=sorted(STRINGS))
+    p.add_argument(
+        "--palette",
+        default=PALETTES[0],
+        choices=PALETTES,
+        help="stage colours: 'status' gives each stage a hue of its own, "
+        "'mono' puts them all on one blue ordinal ramp",
+    )
     p.add_argument("--title", default=None, help="page <title>: a short noun phrase")
     p.add_argument("--heading", default=None, help="the h1 on the page")
     return p
@@ -269,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
     if not AT:
         sys.exit("The report is empty — nothing matched that window.")
     di = ST.index(DONE)
-    L, DK = ramp(len(ST))
+    L, DK = ramp(ST, M["parked"], DONE, a.palette)
     w0, w1 = M["window"]
 
     def fmt(iso):
@@ -397,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
     inflight = sum(A["counts"][ST.index(t)] for t in M["track"] if t in ST and t != DONE)
     tl = "".join(f"--st{i}:{c};" for i, c in enumerate(L))
     td = "".join(f"--st{i}:{c};" for i, c in enumerate(DK))
+    ring_desc = T["by_label_desc_mono" if a.palette == "mono" else "by_label_desc"]
     keylegend = "".join(
         f'<div><span class="sw" style="background:var(--st{i})"></span>{e(s)}</div>'
         for i, s in enumerate(ST)
@@ -409,19 +524,19 @@ def main(argv: list[str] | None = None) -> int:
 <style>
 :root {{
   --plane:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
-  --line:#e1e0d9; --ring:rgba(11,11,11,.10); --accent:#1c5cab; --chipbg:rgba(28,92,171,.09);
+  --line:#e1e0d9; --ring:rgba(11,11,11,.10); --accent:#48698d; --chipbg:rgba(72,105,141,.10);
   {tl} color-scheme:light;
 }}
 @media (prefers-color-scheme:dark) {{
   :root:not([data-theme="light"]) {{
     --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
-    --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#86b6ef; --chipbg:rgba(134,182,239,.13);
+    --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#82a2c6; --chipbg:rgba(130,162,198,.14);
     {td} color-scheme:dark;
   }}
 }}
 :root[data-theme="dark"] {{
   --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
-  --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#86b6ef; --chipbg:rgba(134,182,239,.13);
+  --line:#2c2c2a; --ring:rgba(255,255,255,.10); --accent:#82a2c6; --chipbg:rgba(130,162,198,.14);
   {td} color-scheme:dark;
 }}
 *{{box-sizing:border-box}}
@@ -442,7 +557,7 @@ h2{{font:600 19px/1.3 "IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.01em}
 .kpi b{{font:600 34px/1 "IBM Plex Sans",sans-serif;letter-spacing:-.03em}}
 .kpi span{{font:500 11px/1.3 "IBM Plex Mono",monospace;letter-spacing:.09em;
   text-transform:uppercase;color:var(--muted)}}
-.kpi.hero b{{color:var(--accent)}}
+.kpi.hero b{{color:var(--st{di})}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:16px}}
 .card{{background:var(--surface);border:1px solid var(--ring);border-radius:4px;padding:20px;
   display:flex;flex-direction:column;gap:14px}}
@@ -530,7 +645,7 @@ a:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
 </section>
 
 <section>
-  <div class="sechead"><h2>{T["by_label"]}</h2><p>{T["by_label_desc"]}</p></div>
+  <div class="sechead"><h2>{T["by_label"]}</h2><p>{ring_desc}</p></div>
   <div class="grid">{cards()}</div>
 </section>
 

@@ -19,7 +19,7 @@ jira-flow-report collect -o snapshot.json
 python3 $S/aggregate.py -i snapshot.json -o report.json \\
     --from 2026-08-10 --to 2026-08-21 \\
     --parked-cutoff 2026-08-17
-python3 $S/render.py -i report.json -o flow.html --lang ${lang}
+python3 $S/render.py -i report.json -o flow.html --lang ${lang} --palette ${palette}
 ```
 
 `jira-flow-report report --from ... --to ...` runs all three in one go.
@@ -41,7 +41,8 @@ a `snapshot.json` the user provides, then:
 python3 scripts/aggregate.py -i snapshot.json -o report.json \\
     --from 2026-08-10 --to 2026-08-21 \\
     --parked-cutoff 2026-08-17
-python3 scripts/render.py -i report.json -o flow.html --lang ${lang}
+python3 scripts/render.py -i report.json -o flow.html --lang ${lang} \\
+    --palette ${palette}
 ```
 
 Both are stdlib-only — no install, no network. Paths are relative to this skill's
@@ -108,6 +109,7 @@ def build_vars(cfg: dict, target: str) -> dict:
         "parked": cfg.get("parked", ""),
         "done": cfg.get("done", ""),
         "lang": cfg.get("lang", "en"),
+        "palette": cfg.get("palette", "status"),
         "stages": _fmt_list(stages),
         "track": _fmt_list(cfg.get("track") or []),
         "labels": ", ".join(labels) if labels else "_not set_",
